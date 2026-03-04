@@ -1,0 +1,82 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "QtRecon",
+  "projectDescription": "Qt-based reconnaissance automation tool for penetration testing that speeds up the recon phase",
+  "theme": "aspen",
+  "primaryColor": "#040404",
+  "lightColor": "#7c7c7c",
+  "darkColor": "#d1d1d1",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "concepts/interface-overview",
+          "concepts/configuration-system",
+          "concepts/workspace-management"
+        ]
+      },
+      {
+        "group": "Guides",
+        "pages": [
+          "guides/scanning-hosts",
+          "guides/automation-rules",
+          "guides/managing-credentials",
+          "guides/screenshots",
+          "guides/custom-tools",
+          "guides/snippets"
+        ]
+      },
+      {
+        "group": "Configuration",
+        "pages": [
+          "configuration/file-structure",
+          "configuration/core-binaries",
+          "configuration/user-binaries",
+          "configuration/port-associations",
+          "configuration/autorun-settings",
+          "configuration/variables"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/keyboard-shortcuts",
+          "reference/database-schema",
+          "reference/troubleshooting",
+          "reference/changelog"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Automated nmap scanning with configurable options",
+    "Port-based automatic tool execution",
+    "Integrated credentials management",
+    "Automatic screenshot capture for documentation",
+    "Workspace persistence with SQLite database",
+    "Configurable tool integration via JSON",
+    "Built-in snippet library for common commands",
+    "Job and output tracking"
+  ],
+  "publicApiSurface": [
+    "qtrecon.py - Main application entry point",
+    "core.controller.Controller - Main controller class",
+    "core.database.Database - Database operations",
+    "core.config.Config - Configuration management",
+    "utils.NmapParser.NmapParser - Nmap XML parser",
+    "utils.Screenshot.Screenshot - Screenshot automation",
+    "utils.job.Job - Job execution wrapper",
+    "core.models.hostmodel.HostModel - Host data model",
+    "core.models.jobmodel.JobModel - Job tracking model",
+    "core.models.credsmodel.CredsModel - Credentials model"
+  ]
+}
