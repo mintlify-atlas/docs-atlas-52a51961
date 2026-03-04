@@ -60,6 +60,26 @@ The power of QtRecon lies in its extensive configuration system. A single JSON f
 While QtRecon comes with a default configuration based on common penetration testing tools, you'll want to customize it to match your preferred toolset and workflow.
 </Tip>
 
+## Running QtRecon
+
+### Basic usage
+
+Launch QtRecon with the Python interpreter:
+
+```bash
+pipenv run python qtrecon.py
+```
+
+### Opening a workspace on startup
+
+You can open an existing workspace file directly from the command line:
+
+```bash
+pipenv run python qtrecon.py /path/to/workspace.db
+```
+
+This is useful for quickly resuming a previous reconnaissance session.
+
 ## Example workflow
 
 A typical QtRecon workflow:
