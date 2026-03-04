@@ -1,0 +1,362 @@
+---
+title: Autorun settings
+description: Configure automatic tool execution when ports are discovered
+---
+
+The `autorun` section defines which tools should automatically execute when specific ports are discovered during a scan. This powerful feature enables automated reconnaissance workflows.
+
+## Structure
+
+The autorun configuration mirrors the structure of `ports_associations`, organized by protocol and port:
+
+```json
+"autorun": {
+    "tcp": {
+        "80": [...],
+        "443": [...]
+    },
+    "udp": {
+        "161": [...]
+    }
+}
+```
+
+<Warning>
+Unlike `ports_associations`, the autorun section does NOT support the `"any"` key. Tools must be explicitly mapped to specific ports.
+</Warning>
+
+## Enabling autorun
+
+Autorun behavior is controlled by preferences in `user_prefs`:
+
+```json
+"user_prefs": {
+    "enable_autorun": true,
+    "enable_autorun_on_xml_import": false
+}
+```
+
+<ParamField path="enable_autorun" type="boolean">
+  Enable automatic tool execution during live scans
+</ParamField>
+
+<ParamField path="enable_autorun_on_xml_import" type="boolean">
+  Enable automatic tool execution when importing nmap XML files
+</ParamField>
+
+<Note>
+Setting `enable_autorun_on_xml_import` to false prevents autorun from triggering when loading existing scan data, which is often desirable to avoid re-running time-consuming tools.
+</Note>
+
+## TCP autorun configuration
+
+Map TCP ports to tools that should run automatically:
+
+```json
+"tcp": {
+    "21": [
+        "nmap_ftp"
+    ],
+    "53": [
+        "axfr_no_domain"
+    ],
+    "80": [
+        "feroxbuster",
+        "nikto"
+    ],
+    "88": [
+        "kerbrute"
+    ],
+    "443": [
+        "feroxbuster"
+    ],
+    "445": [
+        "smb_script"
+    ],
+    "1433": [
+        "nmap_mssql"
+    ],
+    "2049": [
+        "nfs-showmount"
+    ],
+    "3268": [
+        "ldapsearch_anonymous"
+    ],
+    "3306": [
+        "nmap_mysql"
+    ],
+    "3389": [
+        "nmap_rdp"
+    ],
+    "6379": [
+        "redis_script"
+    ]
+}
+```
+
+## UDP autorun configuration
+
+```json
+"udp": {
+    "161": [
+        "onesixtyone"
+    ]
+}
+```
+
+## Execution order
+
+Tools are executed in the order they appear in the array:
+
+```json
+"80": [
+    "feroxbuster",  // Runs first
+    "nikto"         // Runs second
+]
+```
+
+<Tip>
+Order tools strategically. For example, run quick enumeration before time-consuming scans.
+</Tip>
+
+## Common autorun patterns
+
+### Web services
+
+```json
+"80": [
+    "feroxbuster",
+    "nikto"
+],
+"443": [
+    "feroxbuster"
+]
+```
+
+Automatically enumerate web directories and scan for vulnerabilities when HTTP/HTTPS ports are found.
+
+### Windows services
+
+```json
+"135": [
+    "smb_script"
+],
+"445": [
+    "smb_script"
+],
+"3389": [
+    "nmap_rdp"
+]
+```
+
+Enumerate SMB and RDP when Windows ports are discovered.
+
+### Database services
+
+```json
+"1433": [
+    "nmap_mssql"
+],
+"3306": [
+    "nmap_mysql"
+]
+```
+
+Run database-specific nmap scripts automatically.
+
+### Active Directory
+
+```json
+"88": [
+    "kerbrute"
+],
+"3268": [
+    "ldapsearch_anonymous"
+]
+```
+
+Enumerate Active Directory when Kerberos or LDAP ports are found.
+
+## Differences from port associations
+
+| Feature | ports_associations | autorun |
+|---------|-------------------|----------|
+| **Purpose** | Define available tools | Define tools to run automatically |
+| **"any" support** | Yes | No |
+| **User interaction** | User clicks to run | Runs automatically |
+| **Typical use** | All relevant tools | Only fast/safe tools |
+
+<CodeGroup>
+
+```json Port associations example
+"tcp": {
+    "any": [
+        "netcat",
+        "firefox"
+    ],
+    "80": [
+        "nikto",
+        "sqlmap",
+        "feroxbuster",
+        "nuclei"
+    ]
+}
+```
+
+```json Autorun example
+"tcp": {
+    "80": [
+        "feroxbuster",
+        "nikto"
+    ]
+}
+```
+
+</CodeGroup>
+
+## Best practices
+
+### 1. Only autorun safe tools
+
+Avoid autorunning tools that:
+- Are highly invasive (e.g., exploit frameworks)
+- Require user credentials
+- Need manual configuration
+- Take excessive time to complete
+
+### 2. Keep autorun lists short
+
+Limiting autorun to 1-2 tools per port prevents:
+- System resource exhaustion
+- Overwhelming output
+- Network detection by excessive traffic
+
+### 3. Choose non-interactive tools
+
+Autorun tools should:
+- Run without user input
+- Complete automatically
+- Have sensible default configurations
+
+```json
+// Good: Automated, non-interactive
+"80": [
+    "feroxbuster",
+    "nikto"
+]
+
+// Bad: Requires interaction
+"80": [
+    "firefox",        // Opens GUI
+    "netcat"          // Requires interaction
+]
+```
+
+### 4. Consider authenticated vs. anonymous
+
+For services that support both authenticated and anonymous access:
+
+```json
+"445": [
+    "smb_script"                    // Anonymous enumeration only
+    // "smb_script_authenticated"   // Don't autorun - requires credentials
+]
+```
+
+<Note>
+Authenticated scans should generally be triggered manually since they require credentials.
+</Note>
+
+### 5. Be mindful of resource usage
+
+If scanning multiple hosts with many open ports, autorun can spawn many processes:
+
+- Monitor system resources during large scans
+- Consider reducing the number of autorun tools
+- Use tools with built-in rate limiting
+
+## Disabling autorun
+
+To temporarily disable autorun without modifying the configuration:
+
+```json
+"user_prefs": {
+    "enable_autorun": false
+}
+```
+
+To disable autorun for a specific port while keeping the configuration:
+
+```json
+// Before
+"80": [
+    "feroxbuster",
+    "nikto"
+]
+
+// After - remove the port entirely or use empty array
+"80": []
+```
+
+## Example: Conservative autorun
+
+A minimal autorun configuration for cautious reconnaissance:
+
+```json
+"autorun": {
+    "tcp": {
+        "21": ["nmap_ftp"],
+        "445": ["smb_script"],
+        "2049": ["nfs-showmount"],
+        "3268": ["ldapsearch_anonymous"]
+    },
+    "udp": {
+        "161": ["onesixtyone"]
+    }
+}
+```
+
+## Example: Aggressive autorun
+
+A comprehensive autorun configuration for thorough automated reconnaissance:
+
+```json
+"autorun": {
+    "tcp": {
+        "21": ["nmap_ftp"],
+        "53": ["axfr_no_domain"],
+        "80": ["feroxbuster", "nikto"],
+        "88": ["kerbrute"],
+        "443": ["feroxbuster"],
+        "445": ["smb_script"],
+        "1433": ["nmap_mssql"],
+        "2049": ["nfs-showmount"],
+        "3268": ["ldapsearch_anonymous"],
+        "3306": ["nmap_mysql"],
+        "3389": ["nmap_rdp"],
+        "6379": ["redis_script"]
+    },
+    "udp": {
+        "161": ["onesixtyone"]
+    }
+}
+```
+
+<Warning>
+Aggressive autorun configurations can generate significant network traffic and system load. Use with caution, especially in production environments or when scanning multiple hosts.
+</Warning>
+
+## Troubleshooting
+
+### Autorun not triggering
+
+1. Check `enable_autorun` is true in `user_prefs`
+2. Verify the port number matches exactly ("80" not "http")
+3. Ensure the tool name exists in `user_binaries`
+4. Check QtRecon console output for errors
+
+### Too many processes spawning
+
+1. Reduce the number of tools in autorun arrays
+2. Scan fewer hosts simultaneously
+3. Disable autorun temporarily: `"enable_autorun": false`

@@ -1,0 +1,237 @@
+---
+title: User binaries
+description: Structure and configuration of custom tools in QtRecon
+---
+
+The `user_binaries` section defines custom tools, scripts, and applications that can be launched from QtRecon. Each binary can be associated with specific ports and configured to run automatically when those ports are discovered.
+
+## Binary structure
+
+Each user binary is defined by a unique key and contains the following fields:
+
+<ParamField path="name" type="string" required>
+  Display name shown in the QtRecon interface
+</ParamField>
+
+<ParamField path="text" type="string" required>
+  Descriptive text shown in context menus and tooltips
+</ParamField>
+
+<ParamField path="binary" type="string" required>
+  Full path to the executable or script
+</ParamField>
+
+<ParamField path="args" type="array" required>
+  Array of arguments passed to the binary. Can include variables like `%%%IP%%%`, `%%%PORT%%%`, etc.
+</ParamField>
+
+<ParamField path="detached" type="boolean" required>
+  Whether the process runs detached from QtRecon (true) or managed by it (false)
+</ParamField>
+
+<ParamField path="in_terminal" type="boolean">
+  Whether to launch the binary inside a terminal emulator (requires detached: true)
+</ParamField>
+
+<ParamField path="edit_before_launch" type="boolean">
+  Whether to show an edit dialog before launching, allowing users to modify arguments
+</ParamField>
+
+<ParamField path="icon" type="string">
+  Path to an icon file to display in the interface
+</ParamField>
+
+<ParamField path="comment" type="string">
+  Additional notes about the binary (not displayed in the UI)
+</ParamField>
+
+## Example configurations
+
+### Simple web scanner
+
+```json
+"nikto": {
+    "name": "Nikto",
+    "text": "Launch Nikto",
+    "detached": false,
+    "in_terminal": false,
+    "edit_before_launch": false,
+    "binary": "/usr/bin/nikto",
+    "args": ["--host", "%%%IP%%%", "--port", "%%%PORT%%%"]
+}
+```
+
+### Interactive terminal tool
+
+```json
+"netcat": {
+    "name": "Netcat",
+    "text": "Run Netcat",
+    "detached": true,
+    "in_terminal": true,
+    "edit_before_launch": false,
+    "binary": "/usr/bin/ncat",
+    "args": ["-nv", "%%%IP%%%", "%%%PORT%%%"]
+}
+```
+
+<Note>
+When `in_terminal` is true, `detached` must also be true.
+</Note>
+
+### Graphical application with icon
+
+```json
+"firefox": {
+    "name": "Firefox",
+    "text": "Launch Firefox",
+    "detached": true,
+    "in_terminal": false,
+    "edit_before_launch": false,
+    "binary": "/usr/bin/firefox",
+    "icon": "/usr/share/icons/hicolor/256x256/apps/firefox.png",
+    "args": ["-P", "tmp", "http://%%%IP%%%:%%%PORT%%%/"]
+}
+```
+
+### Web directory scanner
+
+```json
+"feroxbuster": {
+    "name": "feroxbuster",
+    "text": "Scan files and folders with feroxbuster",
+    "detached": false,
+    "edit_before_launch": false,
+    "binary": "/usr/bin/feroxbuster",
+    "args": [
+        "-n", "-k", "-e", "--thorough", "-B", "--no-state", 
+        "-C", "404", "400", 
+        "--url", "%%%PROTO%%%://%%%IP%%%:%%%PORT%%%/", 
+        "-w", "/usr/share/wordlists/SecLists/Discovery/Web-Content/raft-large-directories-and-files.txt"
+    ]
+}
+```
+
+### Custom script with multiple variables
+
+```json
+"smb_script_authenticated": {
+    "name": "SMB authenticated enum",
+    "text": "Launch authenticated custom smb enumeration script",
+    "comment": "",
+    "detached": false,
+    "binary": "/bin/bash",
+    "args": [
+        "scripts/smb.sh", 
+        "%%%IP%%%", 
+        "%%%DOMAIN%%%", 
+        "%%%USERNAME%%%", 
+        "%%%PASSWORD%%%"
+    ]
+}
+```
+
+### SSH connection
+
+```json
+"ssh": {
+    "name": "ssh",
+    "text": "Connect with SSH",
+    "detached": true,
+    "in_terminal": true,
+    "binary": "/usr/bin/ssh",
+    "args": [
+        "-o", "UserKnownHostsFile=/dev/null", 
+        "%%%USERNAME%%%@%%%IP%%%"
+    ]
+}
+```
+
+### Nmap script launcher
+
+```json
+"nmap_ftp": {
+    "name": "Nmap FTP",
+    "text": "Launch Nmap FTP scripts",
+    "detached": false,
+    "binary": "/usr/bin/nmap",
+    "args": [
+        "-v", "-A", "-Pn", 
+        "-p", "%%%PORT%%%", 
+        "%%%IP%%%", 
+        "--script", "ftp-*"
+    ]
+}
+```
+
+## Detached vs. managed processes
+
+### Detached processes (detached: true)
+
+- Run independently of QtRecon
+- Don't appear in the logs/output panel
+- Suitable for:
+  - Interactive tools (SSH, database clients)
+  - Graphical applications (browsers, file managers)
+  - Terminal-based tools that need user interaction
+
+### Managed processes (detached: false)
+
+- QtRecon captures stdout/stderr
+- Output appears in the logs panel
+- Process status is tracked
+- Suitable for:
+  - Scanners and enumeration tools
+  - Any tool whose output you want to capture
+  - Automated tasks
+
+<Warning>
+If a binary is set to `in_terminal: true`, it must also have `detached: true`. Terminal processes cannot be managed by QtRecon.
+</Warning>
+
+## Using variables
+
+User binaries support variable substitution in the `args` array. See [Variables](/configuration/variables) for the complete list of available variables.
+
+Common variables:
+
+- `%%%IP%%%` - Target IP address
+- `%%%PORT%%%` - Target port number
+- `%%%PROTO%%%` - Protocol (http/https)
+- `%%%DOMAIN%%%` - Domain name
+- `%%%USERNAME%%%` - Username
+- `%%%PASSWORD%%%` - Password
+- `%%%LHOST%%%` - Local host IP
+- `%%%LPORT%%%` - Local port
+
+## Edit before launch
+
+When `edit_before_launch` is true, QtRecon displays a dialog before running the tool:
+
+- Users can modify the command and arguments
+- Useful for tools that often need customization
+- Variables are already substituted in the edit dialog
+
+```json
+"sqlmap": {
+    "name": "Sqlmap",
+    "text": "Launch Sqlmap in batch mode",
+    "detached": false,
+    "edit_before_launch": true,
+    "binary": "/usr/bin/sqlmap",
+    "args": ["-u", "%%%PROTO%%%://%%%IP%%%:%%%PORT%%%", "--forms", "--batch"]
+}
+```
+
+<Tip>
+Enable `edit_before_launch` for tools that frequently require parameter adjustments, like SQL injection scanners or custom exploit scripts.
+</Tip>
+
+## Best practices
+
+1. **Use absolute paths**: Always specify full paths to binaries
+2. **Test commands**: Verify commands work from the terminal before adding them
+3. **Consider output**: Use `detached: false` if you need to see tool output
+4. **Icon paths**: Verify icon paths exist to avoid missing icons
+5. **Variable usage**: Ensure all required variables will be available when the tool runs
+6. **Script paths**: For custom scripts, use absolute paths or paths relative to QtRecon's working directory

@@ -1,0 +1,87 @@
+---
+title: Introduction
+description: QtRecon is a Qt-based reconnaissance automation tool for penetration testing that speeds up your recon phase
+---
+
+## What is QtRecon?
+
+QtRecon is a Qt-based reconnaissance automation framework designed to speed up and automate the reconnaissance phase of penetration testing. Built with PySide6, it provides a graphical interface for managing network scans, executing tools, and organizing findings.
+
+The tool automatically launches programs when specific ports are discovered on targets, stores notes and code snippets, and maintains a complete database of your reconnaissance results in SQLite format.
+
+## Key features
+
+QtRecon offers powerful automation and organization capabilities:
+
+- **Automated tool execution** - Configure tools to run automatically when specific ports are discovered
+- **Interactive tool launcher** - Launch your favorite security tools on-demand with pre-configured commands
+- **Workspace management** - Save and load entire workspaces as SQLite databases for easy project management
+- **Credentials storage** - Store and manage credentials for each host with automatic variable replacement
+- **Snippet library** - Quick access to frequently used commands, reverse shells, and cheatsheets
+- **Screenshot module** - Automatically capture screenshots at configurable intervals for documentation
+- **Nmap integration** - Built-in nmap scanning with XML import/export capabilities
+- **Port-based organization** - View hosts organized by services and ports
+- **Custom variables** - Define variables that automatically replace placeholders in commands
+
+## Who it's for
+
+QtRecon is designed for:
+
+- **Penetration testers** conducting network assessments who need to automate repetitive reconnaissance tasks
+- **Red team operators** who want to streamline their initial access and enumeration workflows
+- **OSCP candidates** and students practicing in lab environments (the tool was created during the author's OSCP journey)
+- **Security professionals** who prefer a GUI-based approach to managing reconnaissance activities
+
+<Note>
+QtRecon is heavily inspired by the SPARTA project and shares a similar philosophy of automating the reconnaissance workflow through port-based tool execution.
+</Note>
+
+## Architecture
+
+QtRecon follows a Model-View-Controller (MVC) architecture:
+
+- **Core controller** (`core/controller.py:28`) - Manages application state and orchestrates between models and views
+- **Database layer** (`core/database.py`) - SQLite-based storage for hosts, services, credentials, and logs
+- **Models** - Separate models for hosts, jobs, logs, and credentials
+- **Qt-based UI** - PySide6 graphical interface with multiple views for different workflows
+
+## Configuration-driven approach
+
+The power of QtRecon lies in its extensive configuration system. A single JSON file (`conf.json`) controls:
+
+- Binary paths and arguments for all external tools
+- Port associations defining which tools can run on which ports
+- Autorun rules specifying which tools execute automatically
+- User preferences and custom variables
+- Snippet library content
+- Screenshot settings
+
+<Tip>
+While QtRecon comes with a default configuration based on common penetration testing tools, you'll want to customize it to match your preferred toolset and workflow.
+</Tip>
+
+## Example workflow
+
+A typical QtRecon workflow:
+
+1. **Start a new scan** - Launch an nmap scan against target hosts
+2. **Automatic enumeration** - QtRecon automatically runs configured tools when ports are discovered (e.g., feroxbuster on port 80, SMB enumeration on port 445)
+3. **Interactive testing** - Right-click on services to launch additional tools manually
+4. **Store credentials** - Add discovered credentials to the database for automatic integration in commands
+5. **Take notes** - Document findings in per-host notes tabs
+6. **Save workspace** - Export the entire project as a SQLite database
+
+<Warning>
+QtRecon launches security tools automatically based on your configuration. Ensure you have proper authorization before scanning any targets.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get QtRecon installed and configured
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Run your first reconnaissance scan
+  </Card>
+</CardGroup>

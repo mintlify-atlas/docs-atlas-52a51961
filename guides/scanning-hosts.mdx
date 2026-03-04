@@ -1,0 +1,215 @@
+---
+title: Scanning hosts
+description: Learn how to create scans, configure nmap options, parse results, and run privileged scans in QtRecon
+---
+
+## Overview
+
+QtRecon provides a comprehensive interface for running nmap scans against target hosts. The scanning functionality supports both standard and privileged scans, with flexible configuration options for ports, timing, scripts, and service detection.
+
+## Creating a new scan
+
+<Steps>
+  <Step title="Open the new scan dialog">
+    From the main menu, select **File** > **New Scan** or use the keyboard shortcut to open the scan configuration dialog.
+  </Step>
+
+  <Step title="Configure scan parameters">
+    The scan dialog pre-fills with your saved nmap options from the configuration. You can customize the following parameters:
+
+    - **Target**: IP address, hostname, or CIDR range
+    - **Ports**: Port specification (e.g., `T:-,U:53,161,631`)
+    - **Scan type**: TCP SYN, TCP Connect, UDP, etc.
+    - **Speed**: Timing template from T0 (slowest) to T5 (fastest)
+    - **Additional arguments**: Any extra nmap flags
+  </Step>
+
+  <Step title="Launch the scan">
+    Click **Start Scan** to begin. The scan will appear in the Jobs tab where you can monitor progress and view output in real-time.
+  </Step>
+</Steps>
+
+## Nmap options configuration
+
+QtRecon stores default nmap options in `conf.json` under the `nmap_options` section. Here's the structure:
+
+```json
+"nmap_options": {
+    "ports": "T:-,U:53,161,631",
+    "type": "-sS",
+    "speed": "-T3",
+    "skip_host_discovery": false,
+    "version_probing": true,
+    "default_scripts": true,
+    "os_detection": true,
+    "tcp_and_udp": true,
+    "additional_args": "-v --min-rate 500"
+}
+```
+
+<Note>
+The `ports` field uses special syntax: `T:-` scans all TCP ports, while `U:53,161,631` scans only UDP ports 53, 161, and 631.
+</Note>
+
+### Configuration options
+
+| Option | Description | Source Location |
+|--------|-------------|----------------|
+| `ports` | Port specification for TCP and UDP | `ui/new_scan.py:13` |
+| `type` | Scan type (`-sS`, `-sT`, `-sU`, etc.) | `ui/new_scan.py:14-16` |
+| `speed` | Timing template (`-T0` through `-T5`) | `ui/new_scan.py:17` |
+| `skip_host_discovery` | Skip ping scan (`-Pn` flag) | `ui/new_scan.py:19` |
+| `version_probing` | Enable service version detection (`-sV`) | `ui/new_scan.py:20` |
+| `default_scripts` | Run default NSE scripts (`-sC`) | `ui/new_scan.py:21` |
+| `os_detection` | Enable OS detection (`-O`) | `ui/new_scan.py:22` |
+| `tcp_and_udp` | Scan both TCP and UDP ports | `ui/new_scan.py:23` |
+| `additional_args` | Extra command-line arguments | `ui/new_scan.py:18` |
+
+<Tip>
+You can save your current scan configuration as the new default by checking the **Save as default** option in the scan dialog.
+</Tip>
+
+## Parsing scan results
+
+QtRecon automatically parses nmap XML output to extract host information, open ports, and service details.
+
+### XML parsing
+
+The `NmapParser` class processes nmap XML files and extracts:
+
+- **Host information**: IP address, MAC address, hostname, OS detection
+- **Port status**: Open ports with protocol (TCP/UDP)
+- **Service details**: Service name, product, version, and extra info
+
+```python
+# From utils/NmapParser.py
+for host in root.iter('host'):
+    if host.find('status').attrib['state'] == 'down':
+        continue
+    
+    ip = host.find('./address/[@addrtype="ipv4"]').attrib['addr']
+    
+    try:
+        hostname = host.find('./*/hostname').attrib['name']
+    except AttributeError:
+        hostname = ""
+    
+    try:
+        os = host.find('./os/osmatch/osclass').attrib['osfamily']
+    except AttributeError:
+        os = "unknown"
+```
+
+### Service description formatting
+
+QtRecon creates descriptive service labels by combining product, version, and extra information:
+
+```python
+# From utils/NmapParser.py:43-54
+service = port.find('./service')
+description = ""
+if service is not None:
+    if 'product' in service.attrib.keys():
+        description = service.attrib['product']
+    else:
+        description = service.attrib['name']
+    
+    if 'version' in service.attrib.keys():
+        description += f" {service.attrib['version']}"
+    if 'extrainfo' in service.attrib.keys():
+        description += f" ({service.attrib['extrainfo']})"
+```
+
+<Note>
+Only hosts with `state="up"` are imported. Down hosts are automatically filtered out during parsing.
+</Note>
+
+## Privileged scans
+
+Some nmap scan types require root privileges (e.g., SYN scans with `-sS`, OS detection with `-O`).
+
+### Configuring graphical sudo
+
+QtRecon uses a graphical sudo helper to elevate privileges. Configure this in `conf.json`:
+
+```json
+"core_binaries": {
+    "graphical_su": {
+        "binary": "/usr/bin/pkexec",
+        "args": []
+    }
+}
+```
+
+<CodeGroup>
+
+```json pkexec (KDE/Plasma)
+"graphical_su": {
+    "binary": "/usr/bin/pkexec",
+    "args": []
+}
+```
+
+```json kdesu
+"graphical_su": {
+    "binary": "/usr/bin/kdesu",
+    "args": ["--"]
+}
+```
+
+```json gksu/gksudo
+"graphical_su": {
+    "binary": "/usr/bin/gksu",
+    "args": []
+}
+```
+
+</CodeGroup>
+
+<Warning>
+Privileged scans require proper sudo/pkexec configuration. If your graphical sudo helper is not configured correctly, privileged scans will fail silently.
+</Warning>
+
+## Nmap output location
+
+All nmap output files are stored in the directory specified in your configuration:
+
+```json
+"paths": {
+    "nmap_output_dir": "/tmp/QtRecon"
+}
+```
+
+You can configure whether XML files are automatically removed after successful import:
+
+```json
+"user_prefs": {
+    "remove_nmap_xml_files_after_scan": false
+}
+```
+
+<Tip>
+Set `remove_nmap_xml_files_after_scan` to `true` to automatically clean up XML files after importing scan results, saving disk space during long engagements.
+</Tip>
+
+## Importing existing scan results
+
+You can import nmap XML files from previous scans:
+
+<Steps>
+  <Step title="Select import option">
+    Go to **File** > **Import hosts from XML**
+  </Step>
+
+  <Step title="Choose XML files">
+    Select one or more nmap XML files to import
+  </Step>
+
+  <Step title="Review imported hosts">
+    QtRecon will parse the files and add discovered hosts to your project. If autorun is enabled for XML imports, tools will automatically trigger based on discovered services.
+  </Step>
+</Steps>
+
+<Note>
+Autorun behavior for XML imports can be controlled separately via the `enable_autorun_on_xml_import` preference in the configuration.
+</Note>

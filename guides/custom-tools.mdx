@@ -1,0 +1,443 @@
+---
+title: Custom tools
+description: Add new enumeration tools to QtRecon's user_binaries configuration with variable substitution and port associations
+---
+
+## Overview
+
+QtRecon's extensibility comes from the `user_binaries` system, which allows you to configure custom tools that integrate seamlessly with the interface. Tools can be launched manually, associated with specific ports, or run automatically via autorun rules.
+
+## Tool structure
+
+Each tool in `user_binaries` is defined by a unique identifier and configuration object:
+
+```json
+"user_binaries": {
+    "nikto": {
+        "name": "Nikto",
+        "text": "Launch Nikto",
+        "detached": false,
+        "in_terminal": false,
+        "edit_before_launch": false,
+        "binary": "/usr/bin/nikto",
+        "args": ["--host", "%%%IP%%%", "--port", "%%%PORT%%%"]
+    }
+}
+```
+
+### Required fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Display name shown in tabs |
+| `text` | string | Menu item text |
+| `binary` | string | Full path to executable |
+
+### Optional fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `args` | array | `[]` | Command-line arguments |
+| `detached` | boolean | `false` | Run as separate process (no output capture) |
+| `in_terminal` | boolean | `false` | Launch in terminal window (requires `detached: true`) |
+| `edit_before_launch` | boolean | `false` | Show command editor before execution |
+| `icon` | string | `""` | Path to icon file for menu |
+| `working_directory` | string | `""` | Working directory for process |
+
+## Adding a new tool
+
+<Steps>
+  <Step title="Open settings">
+    Navigate to **Edit** > **Settings** > **User binaries** tab
+  </Step>
+
+  <Step title="Add new program">
+    Click the **Add new program** button at the top of the user binaries list
+  </Step>
+
+  <Step title="Configure tool details">
+    Fill in the required fields:
+    
+    - **Tab title**: Display name (e.g., "Gobuster")
+    - **Menu text**: What appears in context menus (e.g., "Scan directories with Gobuster")
+    - **Binary path**: Full path to executable (e.g., `/usr/bin/gobuster`)
+  </Step>
+
+  <Step title="Add arguments">
+    In the **Binary arguments** field, specify the command-line arguments using variables:
+    ```
+    dir -u %%%PROTO%%%://%%%IP%%%:%%%PORT%%% -w /usr/share/wordlists/dirb/common.txt
+    ```
+  </Step>
+
+  <Step title="Set port associations">
+    Specify which ports this tool applies to:
+    ```
+    TCP/80;TCP/443;TCP/8080
+    ```
+  </Step>
+
+  <Step title="Configure autorun (optional)">
+    If this tool should run automatically, set autorun ports:
+    ```
+    TCP/80;TCP/443
+    ```
+  </Step>
+
+  <Step title="Save configuration">
+    Click **OK** to save the new tool to your configuration
+  </Step>
+</Steps>
+
+## Variable substitution
+
+QtRecon provides powerful variable substitution for tool arguments:
+
+### Built-in variables
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `%%%IP%%%` | Target IP address | `192.168.1.100` |
+| `%%%HOSTNAME%%%` | Target hostname (or IP if no hostname) | `web01.corp.local` |
+| `%%%PORT%%%` | Selected port number | `443` |
+| `%%%PROTO%%%` | Protocol (http/https based on port) | `https` |
+| `%%%LHOST%%%` | Your local IP (from preferred interfaces) | `10.10.14.5` |
+| `%%%LPORT%%%` | Your preferred listening port | `8444` |
+
+### Credential variables
+
+When credentials are available:
+
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `%%%DOMAIN%%%` | Domain or workgroup | `CORP` |
+| `%%%USERNAME%%%` | Account username | `administrator` |
+| `%%%PASSWORD%%%` | Plaintext password | `P@ssw0rd123` |
+| `%%%HASH%%%` | NTLM hash | `8846f7eaee8fb117ad06bdd830b7586c` |
+
+### Custom variables
+
+Define your own variables in the configuration:
+
+```json
+"user_variables": {
+    "XFREERDP_KEYBOARD": "0x0000040C"
+}
+```
+
+Then reference them in tool arguments:
+
+```json
+"args": ["/kbd:%%%XFREERDP_KEYBOARD%%%"]
+```
+
+<Note>
+Custom variables are replaced for all tools. They're useful for environment-specific settings like keyboard layouts, wordlist paths, or API keys.
+</Note>
+
+## Real-world tool examples
+
+<Accordion title="Web directory brute-forcing (feroxbuster)">
+
+```json
+"feroxbuster": {
+    "name": "feroxbuster",
+    "text": "Scan files and folders with feroxbuster",
+    "detached": false,
+    "edit_before_launch": false,
+    "binary": "/usr/bin/feroxbuster",
+    "args": [
+        "-n",
+        "-k",
+        "-e",
+        "--thorough",
+        "-B",
+        "--no-state",
+        "-C", "404", "400",
+        "--url", "%%%PROTO%%%://%%%IP%%%:%%%PORT%%%/",
+        "-w", "/usr/share/wordlists/SecLists/Discovery/Web-Content/raft-large-directories-and-files.txt"
+    ]
+}
+```
+
+**Key features:**
+- Uses `%%%PROTO%%%` to automatically select http/https
+- Output captured in QtRecon tab
+- Filters 404 and 400 responses
+
+</Accordion>
+
+<Accordion title="Database enumeration (nmap MSSQL scripts)">
+
+```json
+"nmap_mssql": {
+    "name": "Nmap MSSQL",
+    "text": "Launch Nmap MSSQL scripts",
+    "detached": false,
+    "binary": "/usr/bin/nmap",
+    "args": [
+        "-v",
+        "-A",
+        "-Pn",
+        "-p", "%%%PORT%%%",
+        "%%%IP%%%",
+        "--script", "ms-sql-*"
+    ]
+}
+```
+
+**Key features:**
+- Runs all MS-SQL related NSE scripts
+- Uses `%%%PORT%%%` to scan the specific discovered port
+- Output captured for analysis
+
+</Accordion>
+
+<Accordion title="Custom bash script (SMB enumeration)">
+
+```json
+"smb_script": {
+    "name": "SMB enum",
+    "text": "Launch custom smb enumeration script",
+    "comment": "",
+    "detached": false,
+    "edit_before_launch": false,
+    "binary": "/bin/bash",
+    "args": ["scripts/smb.sh", "%%%IP%%%"]
+}
+```
+
+**Key features:**
+- Executes custom bash script
+- Passes IP as argument
+- Script can be versioned with your engagement tools
+
+</Accordion>
+
+<Accordion title="Interactive terminal (SSH)">
+
+```json
+"ssh": {
+    "name": "ssh",
+    "text": "Connect with SSH",
+    "detached": true,
+    "in_terminal": true,
+    "binary": "/usr/bin/ssh",
+    "args": [
+        "-o", "UserKnownHostsFile=/dev/null",
+        "%%%USERNAME%%%@%%%IP%%%"
+    ]
+}
+```
+
+**Key features:**
+- Detached process with terminal
+- Prompts for credentials if available
+- Disables host key checking for lab environments
+
+</Accordion>
+
+<Accordion title="GUI application (Firefox)">
+
+```json
+"firefox": {
+    "name": "Firefox",
+    "text": "Launch Firefox",
+    "detached": true,
+    "in_terminal": false,
+    "edit_before_launch": false,
+    "binary": "/usr/bin/firefox",
+    "icon": "/usr/share/icons/hicolor/256x256/apps/firefox.png",
+    "args": [
+        "-P", "tmp",
+        "http://%%%IP%%%:%%%PORT%%%/"
+    ]
+}
+```
+
+**Key features:**
+- Launches with custom profile (`-P tmp`)
+- Uses custom icon in menus
+- Constructs URL automatically
+
+</Accordion>
+
+<Accordion title="Pre-launch editing (SQLmap)">
+
+```json
+"sqlmap": {
+    "name": "Sqlmap",
+    "text": "Launch Sqlmap in batch mode",
+    "detached": false,
+    "edit_before_launch": true,
+    "binary": "/usr/bin/sqlmap",
+    "args": [
+        "-u", "%%%PROTO%%%://%%%IP%%%:%%%PORT%%%",
+        "--forms",
+        "--batch"
+    ]
+}
+```
+
+**Key features:**
+- `edit_before_launch` shows command editor
+- Allows adding specific injection points before execution
+- Useful for customizing complex commands
+
+</Accordion>
+
+## Detached vs attached processes
+
+### Attached processes (`detached: false`)
+
+Output is captured and displayed in QtRecon tabs:
+
+```python
+# From core/controller.py:484-493
+if program['detached']:
+    # Launch external process
+else:
+    title = self.replace_variables(program['name'], ...)
+    job_id = self.start_attached_job(program['binary'], args, working_directory, host_dst['ip'])
+    self.host_model.create_external_tab(host_dst['id'], title, shlex.join([program['binary']] + args), job_id)
+    if self.get_selected_host():
+        if host_dst and self.get_selected_host()['ip'] == host_dst['ip']:
+            self.view.new_tab(title, job_id)
+```
+
+**Use for:**
+- Scanners (nmap, nikto, feroxbuster)
+- Enumeration tools that produce text output
+- Scripts you want to monitor
+
+### Detached processes (`detached: true`)
+
+Launched as independent processes with no output capture:
+
+```python
+# From core/controller.py:516-523
+def start_detached_job(self, command: str, args: list, working_directory: str):
+    self.log('INFO', f"Launching external program {command} {' '.join(args)}")
+    job = QProcess()
+    job.setWorkingDirectory(working_directory)
+    success = job.startDetached(command, args)
+    if not success:
+        self.log("CRITICAL", "Cannot launch program " + command)
+```
+
+**Use for:**
+- Interactive applications (SSH, RDP clients)
+- GUI tools (browsers, FTP clients)
+- Long-running listeners (netcat, socat)
+
+<Tip>
+Set `in_terminal: true` for CLI tools that need keyboard input (like SSH or netcat). This requires `detached: true`.
+</Tip>
+
+## Working with arguments
+
+Arguments are stored as JSON arrays and processed using Python's `shlex` module:
+
+```python
+# From ui/settings.py:234
+binary_args = QLineEdit()
+binary_args.setText(shlex.join(args))
+
+# From ui/settings.py:48
+binary, *args = shlex.split(self.ui.core_binaries_nmap_cmd.text())
+```
+
+### Quoting and special characters
+
+When arguments contain spaces or special characters, use proper quoting:
+
+```json
+"args": [
+    "-w", "/usr/share/wordlists/SecLists/Discovery/Web-Content/raft-large-directories-and-files.txt",
+    "--exclude-size", "4096,8192"
+]
+```
+
+<Warning>
+If your arguments contain quotes or complex shell syntax, QtRecon may fail to parse them. Test your tool configuration before adding it to autorun.
+</Warning>
+
+## Port associations
+
+Port associations make tools available in context menus when you right-click a host with matching open ports:
+
+```json
+"ports_associations": {
+    "tcp": {
+        "any": [
+            "netcat",
+            "firefox",
+            "nuclei"
+        ],
+        "22": [
+            "ssh"
+        ],
+        "445": [
+            "smb_script",
+            "smb_script_authenticated"
+        ]
+    },
+    "udp": {
+        "161": [
+            "onesixtyone"
+        ]
+    }
+}
+```
+
+### Special port values
+
+- **Numeric ports**: `"80"`, `"443"`, `"22"` - Specific port numbers
+- **ANY**: `"any"` - Available for all ports of this protocol
+
+<Note>
+Port associations are configured automatically through the UI when you set the **Associated to ports** field in the tool configuration.
+</Note>
+
+## Tool validation
+
+QtRecon validates tool configurations when you save settings:
+
+```python
+# From ui/settings.py:206-218
+for i in range(self.layout_user_binaries.count()):
+    frame = self.layout_user_binaries.itemAt(i).widget()
+    widget = frame.layout().itemAt(9).widget()
+    try:
+        shlex.split(widget.text())
+    except ValueError:
+        QMessageBox.critical(self, "Command arguments invalid",
+            f"Arguments specified for command {frame.layout().itemAt(3).widget().text()} are invalid. "
+            f"Check the syntax and quotes if any.")
+        widget.setStyleSheet("background-color: rgba(255, 0, 0, 50);")
+        widget.setFocus()
+        return False
+```
+
+<Warning>
+Invalid argument syntax will prevent saving the entire configuration. Always test your tools before committing them to your configuration.
+</Warning>
+
+## Icon customization
+
+Tools can have custom icons in menus and tabs:
+
+```json
+"filezilla": {
+    "name": "filezilla",
+    "text": "Browse FTP anonymously with filezilla",
+    "icon": "/usr/share/filezilla/resources/32x32/filezilla.png",
+    "detached": true,
+    "binary": "/usr/bin/filezilla",
+    "args": ["%%%IP%%%:%%%PORT%%%"]
+}
+```
+
+<Tip>
+Icons should be PNG or SVG files, ideally 32x32 or 64x64 pixels. Use absolute paths for reliability.
+</Tip>

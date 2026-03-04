@@ -1,0 +1,369 @@
+---
+title: Workspace management
+description: Saving and loading QtRecon workspaces, SQLite database structure, and autosave functionality
+---
+
+QtRecon stores all penetration testing data in SQLite database files that serve as project workspaces. Each workspace contains hosts, services, credentials, notes, and job history. Workspaces can be saved, loaded, and shared with team members.
+
+## Database architecture
+
+QtRecon uses an in-memory SQLite database during runtime for performance, with backup/restore operations to disk for persistence:
+
+```python
+# source: core/database.py:12-14
+def init_DB():
+    Database.database = sqlite3.connect(':memory:', check_same_thread=False)
+    Database.database.row_factory = lambda C, R: {c[0]: R[i] for i, c in enumerate(C.description)}
+```
+
+The database uses dictionary row output for cleaner Python code instead of tuples.
+
+### Database schema
+
+QtRecon creates six tables on initialization:
+
+```python
+# source: core/database.py:16-21
+Database.database.execute("CREATE TABLE hosts(id integer primary key autoincrement not null, os text, ip UNIQUE, hostname, mac, highlight text, pwned integer not null default 0 check(pwned IN (0,1)), nmap, notes)")
+Database.database.execute("CREATE TABLE hosts_ports(host_id integer, proto text, port, status text, description text)")
+Database.database.execute("CREATE TABLE hosts_tabs(id integer primary key autoincrement not null, host_id integer, job_id integer, cmdline text, title text, text)")
+Database.database.execute("CREATE TABLE hosts_creds(id INTEGER primary key autoincrement not null, host_id integer, type TEXT DEFAULT 'password', domain TEXT DEFAULT '', username TEXT DEFAULT '', password TEXT DEFAULT '')")
+Database.database.execute("CREATE TABLE logs(id integer primary key autoincrement not null, date, type, log)")
+Database.database.execute("CREATE TABLE jobs(id integer primary key autoincrement not null, host_id integer, type, timestamp, state, command)")
+```
+
+**Table descriptions:**
+
+| Table | Purpose | Key Fields |
+|-------|---------|------------|
+| `hosts` | Host information | `ip` (UNIQUE), `os`, `hostname`, `mac`, `pwned` (0/1), `notes` |
+| `hosts_ports` | Services per host | `host_id`, `proto` (tcp/udp), `port`, `status`, `description` |
+| `hosts_tabs` | Tool output tabs | `host_id`, `job_id`, `cmdline`, `title`, `text` (output) |
+| `hosts_creds` | Credentials | `host_id`, `type`, `domain`, `username`, `password` |
+| `logs` | Application logs | `date`, `type` (INFO/RUNTIME/ERROR), `log` |
+| `jobs` | Job queue | `host_id`, `type`, `timestamp`, `state`, `command` |
+
+<Note>
+The `ip` field in the `hosts` table has a UNIQUE constraint (added in QtRecon 1.6) to prevent duplicate hosts. Older databases are automatically migrated on load.
+</Note>
+
+## Creating a new workspace
+
+**Menu:** File → New (Ctrl+N)
+
+Creating a new workspace clears the current in-memory database:
+
+```python
+# source: core/controller.py:105-121
+def clear_db(self) -> bool:
+    if Database.request("select count(id) from hosts").fetchone()['count(id)']:
+        reply = QMessageBox.question(self.ui, 'Confirmation', 
+            'All unsaved data will be lost. Are you sure ?')
+        if reply == QMessageBox.No:
+            return False
+    
+    self.view.close_right_panel_tabs()
+    self.job_model.kill_jobs()
+    self.setup_initial_project()
+    self.update_hosts_for_port_panel()
+    return True
+```
+
+The system:
+1. Prompts for confirmation if unsaved data exists
+2. Closes all open tabs
+3. Kills running jobs
+4. Reinitializes an empty database
+5. Resets UI state
+
+<Warning>
+Creating a new workspace does NOT automatically save your current work. If you have unsaved data, you'll get a confirmation dialog, but clicking "Yes" will permanently discard the data.
+</Warning>
+
+## Saving workspaces
+
+QtRecon provides two save operations:
+
+### Quick save (Ctrl+S)
+
+**Menu:** File → Save
+
+Saves to the current filename if one exists:
+
+```python
+# source: core/controller.py:127-143
+def save_db(self, filename: str = ""):
+    if not filename:
+        filename = Database.current_savefile
+    
+    exception = Database.export_DB(filename)
+    if exception:
+        QMessageBox.critical(self.ui, 'Could not save current session', 
+            'Exception occurred: ' + str(exception))
+    else:
+        self.log('RUNTIME', f"Saved current session to {filename}")
+        self.ui.statusBar().showMessage('Saved database !', 15000)
+        Database.has_unsaved_data = False
+        self.ui.ui.actionAutosave_database_every_5_mins.setEnabled(True)
+```
+
+If no current file exists, this behaves like Save-as.
+
+### Save-as (Ctrl+Alt+S)
+
+**Menu:** File → Save-as
+
+Prompts for a new filename and location, allowing you to create workspace copies or save to a different path.
+
+### Export process
+
+The export operation copies the in-memory database to disk with filtering:
+
+```python
+# source: core/database.py:77-102
+def export_DB(filename: str) -> Exception:
+    Database.database.commit()
+    
+    try:
+        dest = sqlite3.connect(filename)
+        Database.database.backup(dest, pages=1, sleep=1)
+        
+        # Delete all jobs
+        dest.execute("DELETE FROM jobs;")
+        # DO NOT Reset database rowID counter for jobs, as it MUST be uniq in db !
+        
+        if Config.get()['user_prefs']['delete_logs_on_save']:
+            # Delete all logs
+            dest.execute("DELETE FROM logs;")
+            # Reset database rowID counter
+            dest.execute("UPDATE SQLITE_SEQUENCE SET SEQ=0 WHERE NAME='logs';")
+        else:
+            # Ignore RUNTIME logs
+            dest.execute("DELETE FROM logs WHERE type == 'RUNTIME';")
+        
+        dest.commit()
+```
+
+**What gets saved:**
+- All hosts, ports, and service information
+- Host tabs (tool outputs)
+- Credentials
+- Notes for each host
+- Logs (INFO/ERROR types, optionally excluding RUNTIME)
+
+**What gets excluded:**
+- Active jobs (cleared on save)
+- RUNTIME logs (always excluded)
+- All logs if "Delete logs on save" is enabled in preferences
+
+<Tip>
+Enable "Delete logs on save" in Settings → User Preferences to keep workspace files smaller and avoid saving session-specific log entries.
+</Tip>
+
+## Loading workspaces
+
+**Menu:** File → Open (Ctrl+O)
+
+Opens a file dialog to select a workspace file:
+
+```python
+# source: core/controller.py:145-150
+def open_db(self, filename: str):
+    if self.clear_db():
+        self.setup_models()
+        self.Popup_open_db = Popup_open_db(self, filename)
+        self.Popup_open_db.show()
+```
+
+The import process:
+
+1. Clears current workspace (with confirmation)
+2. Validates the file exists and is readable
+3. Opens the file as a SQLite database
+4. Uses SQLite's `backup()` function to copy into memory
+5. Runs database compatibility migrations
+6. Refreshes all UI models
+
+```python
+# source: core/database.py:44-74
+def import_DB(filename: str):
+    if not os.path.isfile(filename) or not os.access(filename, os.R_OK):
+        return f'database file "{filename}" not found.'
+    
+    try:
+        source = sqlite3.connect(filename, check_same_thread=False)
+    except sqlite3.OperationalError as e:
+        return e
+    
+    Database.init_DB()
+    source.backup(Database.database)
+    
+    # Compatibility migrations...
+    Database.database.commit()
+    Database.current_savefile = filename
+```
+
+### Command-line loading
+
+You can open a workspace directly from the command line:
+
+```bash
+qtrecon /path/to/workspace.db
+```
+
+```python
+# source: core/controller.py:47-49
+if len(sys.argv) > 1:
+    file_path = os.path.realpath(sys.argv[1])
+    self.open_db(file_path)
+```
+
+## Database compatibility and migrations
+
+QtRecon automatically migrates older database formats when loading:
+
+**Migration 1: Adding hosts_creds table (QtRecon < 1.2)**
+```python
+# source: core/database.py:57-59
+if not Database.request("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'hosts_creds'").fetchall():
+    Database.database.execute("CREATE TABLE hosts_creds(id INTEGER primary key autoincrement not null, host_id integer, type TEXT DEFAULT 'password', domain TEXT DEFAULT '', username TEXT DEFAULT '', password TEXT DEFAULT '')")
+```
+
+**Migration 2: Adding UNIQUE constraint to IP (QtRecon < 1.6)**
+```python
+# source: core/database.py:61-64
+if 'ip UNIQUE' not in Database.request("SELECT sql FROM sqlite_schema WHERE name='hosts';").fetchone()['sql']:
+    Database.database.execute("CREATE UNIQUE INDEX host_ip ON hosts(ip);")
+```
+
+**Migration 3: Adding cmdline field to hosts_tabs (QtRecon < 1.7)**
+```python
+# source: core/database.py:66-71
+if Database.request("SELECT COUNT(*) as count FROM pragma_table_info('hosts_tabs') WHERE name='cmdline'").fetchone()['count'] == 0:
+    Database.database.execute("ALTER TABLE hosts_tabs RENAME TO hosts_tabs_temp;")
+    Database.database.execute("CREATE TABLE hosts_tabs(id integer primary key autoincrement not null, host_id integer, job_id integer, cmdline text, title text, text)")
+    Database.database.execute("INSERT INTO hosts_tabs(id, host_id, job_id, title, text) SELECT id, host_id, job_id, title, text FROM hosts_tabs_temp")
+    Database.database.execute("DROP TABLE hosts_tabs_temp;")
+```
+
+These migrations run automatically and silently when loading older workspaces, ensuring backward compatibility.
+
+## Autosave functionality
+
+QtRecon can automatically save your workspace at regular intervals:
+
+**Enable:** Options → Autosave database every 5 mins (checkbox in menu)
+
+```python
+# source: core/controller.py:30-40
+autosave_timer = QTimer()
+# ...
+self.autosave_timer.timeout.connect(self.autosave)
+self.autosave_timer.start(Config.get()['user_prefs']['autosave_interval'])
+
+def autosave(self):
+    if self.ui.ui.actionAutosave_database_every_5_mins.isChecked() and Database.current_savefile:
+        self.save_db()
+```
+
+**How it works:**
+- A QTimer triggers every `autosave_interval` milliseconds (configured in Settings)
+- Default interval is 300,000ms (5 minutes)
+- Only saves if a current file exists (not for new, unsaved workspaces)
+- Only saves if the autosave checkbox is enabled
+- Uses the same save logic as Ctrl+S
+
+<Note>
+Autosave is disabled until you perform your first save operation (File → Save or Save-as). This prevents accidental autosaves to unknown locations.
+</Note>
+
+**Configuring autosave interval:**
+
+1. Open Settings (F10)
+2. Go to "User Preferences" tab
+3. Enable "Autosave" checkbox
+4. Set "Autosave interval" in seconds (converts to milliseconds internally)
+
+```python
+# source: ui/settings.py:65-66
+self.config["user_prefs"]['autosave'] = self.ui.autosave.isChecked()
+self.config["user_prefs"]['autosave_interval'] = self.ui.autosave_interval.value() * 1000
+```
+
+## Unsaved data tracking
+
+QtRecon tracks whether you have unsaved modifications:
+
+```python
+# source: core/database.py:38-40
+if args.count('RUNTIME') != 1 and any(request.lower().startswith(command.lower()) for command in ['update', 'insert', 'delete']):
+    Database.has_unsaved_data = True
+```
+
+Any `INSERT`, `UPDATE`, or `DELETE` query (except those tagged with 'RUNTIME') marks the database as having unsaved data.
+
+**Close protection:**
+
+```python
+# source: ui/mainwindow.py:16-23
+def closeEvent(self, event):
+    if Database.has_unsaved_data:
+        reply = QMessageBox.question(self, "Confirmation needed",
+            "There are currently unsaved data. Are you sure you want to exit the program?", 
+            QMessageBox.Yes, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
+```
+
+If you try to close QtRecon with unsaved changes, you'll get a confirmation dialog to prevent accidental data loss.
+
+## Workspace file format
+
+Workspaces are standard SQLite3 database files:
+
+- **Extension:** Any (commonly `.db`, `.sqlite`, or `.qtrecon`)
+- **Format:** SQLite 3.x
+- **Encoding:** UTF-8
+- **Compression:** None (use external compression if needed)
+
+**Inspecting workspaces:**
+
+You can use standard SQLite tools to inspect or query workspaces:
+
+```bash
+# Open with sqlite3 CLI
+sqlite3 myproject.db
+
+# Example queries
+SELECT ip, hostname, os FROM hosts;
+SELECT * FROM hosts_ports WHERE port = 80;
+SELECT * FROM hosts_creds;
+```
+
+<Tip>
+Workspace files can be version controlled with Git, shared via file transfer, or backed up like any other file. They're self-contained with all project data.
+</Tip>
+
+## Best practices
+
+**Regular saves:**
+- Enable autosave for long assessment sessions
+- Manually save after major discoveries (File → Save)
+- Use Save-as to create milestone snapshots
+
+**Workspace organization:**
+- Use descriptive filenames: `client-external-2024-03-04.db`
+- Store workspaces in a dedicated projects directory
+- Back up workspaces before major changes
+
+**Data cleanup:**
+- Enable "Delete logs on save" to reduce file size
+- Use "Delete hosts with no services" to remove noise
+- Remove completed job tabs before saving
+
+**Collaboration:**
+- Share workspace files with team members
+- Use version control for workspace files
+- Consider separate workspaces for different assessment phases

@@ -1,0 +1,306 @@
+---
+title: Installation
+description: Install QtRecon using Pipenv and configure your environment
+---
+
+## System requirements
+
+Before installing QtRecon, ensure your system meets these requirements:
+
+- **Python** - Python 3.7 or higher (Python 3.12+ recommended)
+- **Operating system** - Linux (primary platform)
+- **Display server** - X11 or Wayland for the Qt graphical interface
+- **Nmap** - Required for network scanning functionality
+
+<Note>
+QtRecon was developed and tested on Linux. While it may work on other platforms, Linux is the recommended and supported environment.
+</Note>
+
+## Dependencies
+
+QtRecon requires the following Python packages (managed via Pipenv):
+
+| Package | Purpose |
+|---------|----------|
+| `pyside6` | Qt6 bindings for the graphical interface |
+| `ansi2html` | Convert ANSI terminal output to HTML |
+| `html2text` | Convert HTML content to plain text |
+| `netifaces` | Network interface information |
+| `pillow` | Image processing for screenshots |
+| `psutil` | Process and system utilities |
+
+These dependencies are automatically installed when using Pipenv.
+
+## Installation with Pipenv
+
+<Steps>
+  <Step title="Clone the repository">
+    Download the QtRecon source code to your local machine:
+
+    ```bash
+    git clone <repository-url>
+    cd qtrecon
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Use Pipenv to create a virtual environment and install all required packages:
+
+    ```bash
+    pipenv install
+    ```
+
+    This command reads the `Pipfile` and installs:
+    - ansi2html
+    - html2text
+    - netifaces
+    - pillow
+    - psutil
+    - pyside6
+  </Step>
+
+  <Step title="Verify installation">
+    Test that QtRecon launches successfully:
+
+    ```bash
+    pipenv run python qtrecon.py
+    ```
+
+    You should see the QtRecon main window appear.
+  </Step>
+</Steps>
+
+## Configuration setup
+
+After installation, you need to configure QtRecon for your environment.
+
+### Configuration file location
+
+QtRecon stores its configuration in:
+
+```
+$XDG_CONFIG_HOME/qtrecon/conf.json
+```
+
+Or if `XDG_CONFIG_HOME` is not set:
+
+```
+$HOME/.config/qtrecon/conf.json
+```
+
+### Initial configuration
+
+<Steps>
+  <Step title="Copy example configuration">
+    QtRecon includes an example configuration file with sensible defaults:
+
+    ```bash
+    mkdir -p ~/.config/qtrecon
+    cp conf.json.example ~/.config/qtrecon/conf.json
+    ```
+  </Step>
+
+  <Step title="Edit binary paths">
+    Open `~/.config/qtrecon/conf.json` and update paths to match your system:
+
+    ```json
+    "core_binaries": {
+        "nmap": {
+            "binary": "/usr/bin/nmap",
+            "args": []
+        },
+        "terminal": {
+            "binary": "/usr/bin/konsole",
+            "args": ["-e"]
+        },
+        "graphical_su": {
+            "binary": "/usr/bin/pkexec",
+            "args": []
+        }
+    }
+    ```
+
+    Update these paths based on your terminal emulator and system binaries.
+  </Step>
+
+  <Step title="Configure user binaries">
+    The `user_binaries` section defines all security tools QtRecon can launch. Each tool needs:
+
+    - `binary`: Full path to the executable
+    - `args`: Command-line arguments (supports variables like `%%%IP%%%`, `%%%PORT%%%`)
+    - `detached`: Whether to run in background
+    - `in_terminal`: Whether to launch in a terminal window
+
+    Example for nikto:
+
+    ```json
+    "nikto": {
+        "name": "Nikto",
+        "text": "Launch Nikto",
+        "detached": false,
+        "in_terminal": false,
+        "edit_before_launch": false,
+        "binary": "/usr/bin/nikto",
+        "args": ["--host", "%%%IP%%%", "--port", "%%%PORT%%%"]
+    }
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+If you see binary not found errors on startup, QtRecon will log which binaries are missing. Update your configuration or install the required tools.
+</Warning>
+
+## System-specific requirements
+
+### Privileged scans
+
+For features requiring root access (OS detection, SYN scans):
+
+<Tabs>
+  <Tab title="Using pkexec (recommended)">
+    Configure pkexec in your configuration:
+
+    ```json
+    "graphical_su": {
+        "binary": "/usr/bin/pkexec",
+        "args": []
+    }
+    ```
+
+    Ensure your umask allows the user to read nmap XML output files created by root.
+  </Tab>
+
+  <Tab title="Running as root">
+    If you run QtRecon as root, disable the graphical_su wrapper:
+
+    ```json
+    "graphical_su": {
+        "binary": "",
+        "args": []
+    }
+    ```
+
+    <Warning>
+    Running GUI applications as root is not recommended for security reasons.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Terminal emulator
+
+QtRecon launches some tools in a terminal window. Configure your preferred terminal:
+
+```json
+"terminal": {
+    "binary": "/usr/bin/konsole",  // or gnome-terminal, xterm, etc.
+    "args": ["-e"]
+}
+```
+
+Common terminal configurations:
+
+| Terminal | Binary | Args |
+|----------|--------|------|
+| Konsole | `/usr/bin/konsole` | `["-e"]` |
+| GNOME Terminal | `/usr/bin/gnome-terminal` | `["--"]` |
+| xterm | `/usr/bin/xterm` | `["-e"]` |
+| Alacritty | `/usr/bin/alacritty` | `["-e"]` |
+
+## External tools
+
+While not required, these common penetration testing tools can be configured in QtRecon:
+
+<AccordionGroup>
+  <Accordion title="Web scanning tools">
+    - nikto
+    - feroxbuster
+    - nuclei
+    - sqlmap
+  </Accordion>
+
+  <Accordion title="Network tools">
+    - nmap (required)
+    - masscan
+    - netcat/ncat
+  </Accordion>
+
+  <Accordion title="Service enumeration">
+    - enum4linux
+    - ldapsearch
+    - showmount
+    - redis-cli
+    - onesixtyone
+  </Accordion>
+
+  <Accordion title="Remote access">
+    - ssh
+    - xfreerdp
+    - vncviewer
+    - filezilla
+  </Accordion>
+
+  <Accordion title="Active Directory">
+    - kerbrute
+    - smbclient
+    - rpcclient
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+You don't need all tools installed to use QtRecon. Configure only the tools you have available and use regularly.
+</Tip>
+
+## Verifying installation
+
+After configuration, launch QtRecon and check the logs:
+
+```bash
+pipenv run python qtrecon.py
+```
+
+The application should start with the message:
+
+```
+New project started ! Happy recon ;-)
+```
+
+If you see warnings about missing binaries, those tools won't be available but QtRecon will still function.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Qt platform plugin error">
+    If you see "Could not find the Qt platform plugin", ensure you have:
+    - A display server running (X11/Wayland)
+    - The `DISPLAY` environment variable set
+    - Qt platform plugins installed
+
+    Try:
+    ```bash
+    export QT_DEBUG_PLUGINS=1
+    pipenv run python qtrecon.py
+    ```
+  </Accordion>
+
+  <Accordion title="Python version compatibility">
+    QtRecon requires Python 3.7+. A bug fix in v1.7.1 addressed crashes with Python < 3.12.
+
+    Check your Python version:
+    ```bash
+    python --version
+    ```
+  </Accordion>
+
+  <Accordion title="Missing configuration file">
+    If QtRecon doesn't find a configuration file, it loads default settings and saves them to `~/.config/qtrecon/conf.json`.
+
+    You can then edit this file to customize your setup.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<Card title="Quick start guide" icon="rocket" href="/quickstart">
+  Learn how to run your first reconnaissance scan with QtRecon
+</Card>

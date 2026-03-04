@@ -1,0 +1,246 @@
+---
+title: Troubleshooting
+description: Common issues and solutions when using QtRecon
+---
+
+This page covers common issues you may encounter while using QtRecon and how to resolve them.
+
+## Privileged scans
+
+### Problem: Cannot read Nmap XML results when run as root
+
+If you're running Nmap with elevated privileges (for SYN scans, OS detection, etc.), the XML output file may be created with restrictive permissions that your user cannot read.
+
+**Cause**: A restrictive umask on the root account prevents your regular user from reading files created by root.
+
+**Solutions**:
+
+<Accordion title="Option 1: Run QtRecon as root (not recommended)">
+  ```bash
+  sudo pipenv run python qtrecon.py
+  ```
+  
+  Then configure QtRecon to not use pkexec by setting an empty string in:
+  
+  `core_binaries -> graphical_su -> binary`
+  
+  <Warning>
+  Running GUI applications as root is generally discouraged for security reasons.
+  </Warning>
+</Accordion>
+
+<Accordion title="Option 2: Adjust root umask">
+  Modify root's umask to allow world-readable files:
+  
+  ```bash
+  sudo umask 022
+  ```
+  
+  This needs to be set before running scans via QtRecon.
+</Accordion>
+
+<Accordion title="Option 3: Use output directory with proper permissions">
+  Configure Nmap to write to a directory where your user has access, or create a shared directory:
+  
+  ```bash
+  sudo mkdir /tmp/nmap-output
+  sudo chmod 777 /tmp/nmap-output
+  ```
+</Accordion>
+
+### Problem: Cannot stop privileged Nmap scans
+
+When Nmap is launched with pkexec, QtRecon cannot send kill signals to the process.
+
+**Workaround**: Manually kill the process:
+
+```bash
+sudo pkill -f nmap
+```
+
+<Note>
+This is a known limitation. See the bugs section in the changelog.
+</Note>
+
+## Binary permissions and detection
+
+### Problem: "Binary X cannot be found" errors on startup
+
+**Cause**: QtRecon checks configured binaries at startup. Missing tools generate runtime log entries.
+
+**Solution**: Either install the missing binary or remove it from your configuration:
+
+1. Press **F10** to open settings
+2. Navigate to the tool configuration
+3. Either install the tool or remove the entry
+
+### Problem: "Binary X is not executable" errors
+
+**Cause**: The binary exists but lacks execute permissions.
+
+**Solution**: Add execute permissions:
+
+```bash
+chmod +x /path/to/binary
+```
+
+## Screenshot module issues
+
+### Problem: Screen lock detection not working
+
+If QtRecon continues taking screenshots while the screen is locked:
+
+**Solution**: Verify your lock detection command:
+
+1. Test the command manually:
+   ```bash
+   # Example for GNOME
+   gdbus call --session --dest org.gnome.ScreenSaver \
+     --object-path /org/gnome/ScreenSaver \
+     --method org.gnome.ScreenSaver.GetActive
+   ```
+
+2. Ensure the expected result matches what you configured (e.g., `(true,)` when locked)
+
+3. Update settings in the Screenshots tab with the correct command and expected output
+
+### Problem: ImageMagick convert errors when converting PNG to JPG
+
+**Cause**: The `magick` binary is not installed or not in PATH.
+
+**Solution**:
+
+```bash
+# On Debian/Ubuntu
+sudo apt install imagemagick
+
+# On Arch
+sudo pacman -S imagemagick
+
+# Verify installation
+which magick
+```
+
+### Problem: Screenshots show black screen or wrong display
+
+**Cause**: Using external screenshot tool on Wayland, or multi-monitor issues.
+
+**Solution**:
+
+- Switch to native Qt engine (X11 only) in Screenshots tab
+- For Wayland, use an external tool like `grim`:
+  ```
+  grim %%%OUTPUT%%%
+  ```
+
+## Database and import issues
+
+### Problem: "Database file not found" when opening workspace
+
+**Cause**: The file path is incorrect or the file doesn't exist.
+
+**Solution**: Verify the file exists and you have read permissions:
+
+```bash
+ls -l /path/to/workspace.db
+```
+
+### Problem: Freeze when importing large XML files
+
+**Cause**: Large scan results (e.g., /16 subnet scans) can take time to process.
+
+**Solution**: 
+
+- Be patient - v1.6+ includes performance optimizations for large imports
+- Import multiple smaller XML files instead of one massive file
+- Monitor the progress dialog
+
+<Note>
+Importing several XML files at once is supported in v1.6+.
+</Note>
+
+### Problem: Duplicate IP address error when importing
+
+**Cause**: Trying to import a host that already exists in the workspace (v1.7.1+).
+
+**Solution**: QtRecon will show an error dialog. You can:
+
+- Delete the existing host first
+- Use the "Replace host data" feature (if available)
+- Skip importing that host
+
+## Configuration issues
+
+### Problem: Configuration file not found or crashes on reload
+
+**Default location**: `$XDG_CONFIG_HOME/qtrecon/conf.json` or `~/.config/qtrecon/conf.json` (v1.7+)
+
+**Solution**:
+
+1. Check if the config file exists:
+   ```bash
+   ls -la ~/.config/qtrecon/conf.json
+   ```
+
+2. If corrupted, QtRecon will load defaults. The original is backed up automatically.
+
+3. Validate JSON syntax:
+   ```bash
+   python -m json.tool ~/.config/qtrecon/conf.json
+   ```
+
+### Problem: Changes to config.json are not persisted
+
+**Cause**: You may be editing the wrong file or QtRecon is overwriting on exit.
+
+**Solution**:
+
+- Always use **F10** to edit configuration through the GUI (v1.6+)
+- If editing manually, ensure QtRecon is closed
+- Configuration is saved automatically when changed via GUI
+
+## Autorun issues
+
+### Problem: Tools not running automatically on port discovery
+
+**Checks**:
+
+1. Verify autorun is enabled: **Options → Enable automatic tools**
+2. Check autorun configuration matches port associations in settings (F10)
+3. Ensure the binary is executable and in your PATH
+4. Check logs tab for AUTORUN entries and error messages
+
+### Problem: Too many tools launching simultaneously
+
+**Solution**: Adjust your autorun configuration to be more selective:
+
+- Use specific ports instead of "any"
+- Reduce the number of tools per port
+- Disable autorun on import if you prefer manual control
+
+## Python and dependency issues
+
+### Problem: Crash with Python < 3.12
+
+**Cause**: Fixed in v1.7.1. Earlier versions may have compatibility issues.
+
+**Solution**: Update to QtRecon v1.7.1 or later.
+
+### Problem: Dark theme rendering issues
+
+**Cause**: Fixed in v1.7.1.
+
+**Solution**: Update to v1.7.1+ or manually adjust Qt theme settings.
+
+## Getting help
+
+If you encounter issues not covered here:
+
+1. Check the **Logs** tab in QtRecon for detailed error messages
+2. Review the [changelog](/reference/changelog) to see if your issue is a known bug
+3. Ensure you're running the latest version
+4. Check if the issue persists with default configuration (backup your config first!)
+
+<Note>
+Most runtime errors are logged to the Logs tab with category RUNTIME, WARNING, or CRITICAL.
+</Note>

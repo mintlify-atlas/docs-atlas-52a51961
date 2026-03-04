@@ -1,0 +1,226 @@
+---
+title: Interface overview
+description: Understanding QtRecon's main window layout, panels, and navigation
+---
+
+QtRecon features a comprehensive Qt-based graphical interface designed for efficient penetration testing workflows. The interface is organized into multiple panels and tabs to manage hosts, services, credentials, and automation tasks.
+
+## Main window layout
+
+The main window (1200x836px default) uses a split-panel design with vertical and horizontal splitters that you can adjust to suit your workflow:
+
+```python
+# source: ui/ui_mainwindow.py:103-105
+self.splitter = QSplitter(self.centralwidget)
+self.splitter.setOrientation(Qt.Orientation.Vertical)
+```
+
+### Top section: Work tabs
+
+The upper section contains the primary work area with five main tabs:
+
+- **Hosts** - Main host management interface
+- **Services** - Port and service overview across all hosts
+- **Credentials** - Credential storage and management
+- **Snippets** - Quick access to command snippets and payloads
+- **Screenshots** - Automated screenshot capture configuration
+
+### Bottom section: Management tabs
+
+The lower section provides operational visibility:
+
+- **Logs** - Real-time logging of all activities
+- **Jobs** - Active and queued automation tasks
+
+## Hosts tab layout
+
+The Hosts tab is split into two main panels:
+
+### Left panel: Host list
+
+The host list displays all discovered hosts in a sortable table with columns for:
+
+- Status icon (pwned/highlighted)
+- Operating system
+- IP address (130px width)
+- Hostname
+- MAC address
+
+```python
+# source: ui/ui_mainwindow.py:127-142
+self.host_list = QTableView(self.layoutWidget)
+self.host_list.setMinimumSize(QSize(330, 0))
+self.host_list.setAlternatingRowColors(True)
+self.host_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+self.host_list.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+```
+
+<Note>
+The host list uses a custom filter field below the table with a clear button and search icon. Use it to quickly filter hosts by IP address or hostname.
+</Note>
+
+**Action buttons:**
+- **Import Nmap XML** (Ctrl+I) - Import scan results from XML files
+- **Scan host or range** (Ctrl+H) - Launch new network scans
+
+### Right panel: Application tabs
+
+When you select a host, the right panel displays dynamic tabs:
+
+```python
+# source: core/view.py:32-35
+self.default_tabs = [
+    {'name': 'Ports', 'object': type(QTableWidget())},
+    {'name': 'Nmap', 'object': type(QTextEdit())},
+    {'name': 'Credentials', 'object': type(QTableWidget())},
+    {'name': 'Notes', 'object': type(QNoteTextEdit())}
+]
+```
+
+**Default tabs for each host:**
+
+1. **Ports** - Services and ports detected on the host
+2. **Nmap** - Raw nmap output for the host
+3. **Credentials** - Credentials specific to this host
+4. **Notes** - Free-form notes (auto-saved to database)
+
+**Additional tabs** are created dynamically when you run tools against the host. Each tool execution creates a new closable tab showing command output.
+
+<Tip>
+Tabs in the application panel are closable (except the default tabs). Click the 'X' icon to remove completed job outputs and keep your workspace clean.
+</Tip>
+
+## Services tab
+
+The Services tab provides a port-centric view across all hosts:
+
+**Left panel: Port summary**
+- Table showing TCP and UDP ports with host counts
+- Grouped by protocol (TCP/UDP)
+
+**Right panel: Hosts for selected port**
+- Lists all hosts with the selected port open
+- Click "Go to host view for this machine" to jump to the Hosts tab
+- Copy buttons for clipboard operations
+
+```python
+# source: ui/ui_mainwindow.py:189-209
+self.port_table = QTableWidget(self.services)
+self.hosts_for_port_table = QTableView(self.services)
+```
+
+## Credentials tab
+
+Manages discovered or manually entered credentials:
+
+- Searchable table with filter field
+- Sortable columns for type, domain, username, password
+- Context menu for editing and deletion
+- "View in host tab" to navigate to the credential's associated host
+
+```python
+# source: ui/ui_mainwindow.py:254-261
+self.creds_table = QTableView(self.creds)
+self.creds_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+self.creds_table.setSortingEnabled(True)
+```
+
+## Snippets tab
+
+Provides quick access to customizable command snippets:
+
+**Configuration fields:**
+- **LHOST** - Your attacking machine IP (auto-populated from preferred interfaces)
+- **LPORT** - Listening port for reverse shells
+- **Escape chars** - Characters to automatically escape in snippets
+- **Urlencode chars** - Characters to URL-encode in snippets
+
+```python
+# source: core/view.py:82-86
+for interface_name in Config.get()['user_prefs']['preferred_interfaces']:
+    if interface_name in netifaces.interfaces():
+        self.ui.ui.lhost.setText(netifaces.ifaddresses(interface_name)[netifaces.AF_INET][0]['addr'])
+        break
+self.ui.ui.lport.setText(str(Config.get()['user_prefs']['preferred_lport']))
+```
+
+Snippets are organized into sub-tabs defined in your `conf.json` and support variable substitution for `%%%LHOST%%%`, `%%%LPORT%%%`, and custom variables.
+
+<Warning>
+Clicking "Reset values" will reload LHOST and LPORT from your configuration, discarding any manual changes.
+</Warning>
+
+## Log table
+
+The log table in the management section displays timestamped entries:
+
+```python
+# source: ui/ui_mainwindow.py:579-594
+self.log_table = QTableView(self.log_tab)
+self.log_table.setAlternatingRowColors(True)
+self.log_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+```
+
+**Log types:**
+- **INFO** - General information (saved to database)
+- **RUNTIME** - Session-only messages (not saved)
+- **ERROR** - Error conditions
+
+## Job management panel
+
+The Jobs tab shows active automation tasks with controls:
+
+```python
+# source: ui/ui_mainwindow.py:602-643
+self.button_play = QPushButton(self.jobs_tab)
+self.button_pause = QPushButton(self.jobs_tab)  
+self.button_stop = QPushButton(self.jobs_tab)
+```
+
+**Job controls:**
+- **Play** (▶) - Resume paused jobs
+- **Pause** (⏸) - Temporarily pause job execution
+- **Stop** (⏹) - Terminate the selected job
+
+Jobs display their command, state (queued/running/completed/failed), and timestamps.
+
+## Menu bar
+
+The application menu provides access to core functionality:
+
+**File menu:**
+- New (Ctrl+N) - Clear database and start fresh project
+- Open (Ctrl+O) - Load saved workspace
+- Save (Ctrl+S) - Save to current file
+- Save-as (Ctrl+Alt+S) - Save to new file
+- Exit (Ctrl+Q)
+
+**Edit menu:**
+- Search in notes (Ctrl+F)
+- Delete hosts with no services
+
+**Options menu:**
+- Enable automatic tools (checkbox)
+- Enable automatic tools on import (checkbox)
+- Settings (F10) - Open configuration dialog
+- Reload configuration from file (F5)
+
+```python
+# source: ui/ui_mainwindow.py:678-694
+self.menuFile.addAction(self.actionNew)
+self.menuFile.addAction(self.actionOpen)
+self.menuFile.addAction(self.actionSave)
+self.menuFile.addAction(self.actionSaveAs)
+```
+
+## Status bar
+
+The bottom status bar shows temporary messages for 5-15 seconds:
+- Save confirmations
+- Import completion
+- Error messages
+
+```python
+# source: core/controller.py:141
+self.ui.statusBar().showMessage('Saved database !', 15000)
+```

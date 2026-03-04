@@ -1,0 +1,325 @@
+---
+title: Automation rules
+description: Configure autorun rules to automatically trigger tools when specific ports are discovered during scans
+---
+
+## Overview
+
+QtRecon's automation system automatically launches enumeration tools when specific ports are discovered during scans. This eliminates manual repetition and ensures consistent enumeration across all targets.
+
+## How autorun works
+
+When a scan completes and discovers open ports, QtRecon checks the `autorun` configuration to determine which tools should automatically execute for each port. Tools run in the background with output captured in dedicated tabs.
+
+<Note>
+Autorun only triggers for newly discovered ports. If you re-scan an existing host with the same open ports, autorun will not trigger again unless you explicitly request it.
+</Note>
+
+## Configuring autorun rules
+
+Autorun rules are defined in `conf.json` under the `autorun` section, organized by protocol (TCP/UDP) and port number:
+
+```json
+"autorun": {
+    "tcp": {
+        "21": [
+            "nmap_ftp"
+        ],
+        "80": [
+            "feroxbuster",
+            "nikto"
+        ],
+        "443": [
+            "feroxbuster"
+        ],
+        "445": [
+            "smb_script"
+        ],
+        "3389": [
+            "nmap_rdp"
+        ]
+    },
+    "udp": {
+        "161": [
+            "onesixtyone"
+        ]
+    }
+}
+```
+
+### Rule structure
+
+Each autorun rule consists of:
+
+- **Protocol**: `tcp` or `udp`
+- **Port number**: Specific port (e.g., `"80"`) or `"any"` for all ports
+- **Tool list**: Array of tool identifiers from `user_binaries`
+
+<Tip>
+Multiple tools can run automatically for the same port. In the example above, both `feroxbuster` and `nikto` run when port 80 is discovered.
+</Tip>
+
+## Port associations vs autorun
+
+QtRecon distinguishes between two types of port-tool relationships:
+
+### Port associations
+
+Tools available in the right-click menu when you select a host with this port:
+
+```json
+"ports_associations": {
+    "tcp": {
+        "80": [
+            "nikto",
+            "sqlmap",
+            "firefox",
+            "nuclei"
+        ]
+    }
+}
+```
+
+### Autorun
+
+Tools that execute automatically when the port is discovered:
+
+```json
+"autorun": {
+    "tcp": {
+        "80": [
+            "feroxbuster",
+            "nikto"
+        ]
+    }
+}
+```
+
+<Note>
+A tool can be associated with a port without being in autorun. For example, `firefox`, `sqlmap`, and `nuclei` are available for port 80 but don't run automatically.
+</Note>
+
+## Real-world autorun examples
+
+Here are proven autorun configurations from the default `conf.json.example`:
+
+<Accordion title="Web services (80, 443)">
+
+```json
+"80": [
+    "feroxbuster",
+    "nikto"
+],
+"443": [
+    "feroxbuster"
+]
+```
+
+Automatically runs directory brute-forcing and vulnerability scanning on discovered web servers.
+
+</Accordion>
+
+<Accordion title="SMB (445)">
+
+```json
+"445": [
+    "smb_script"
+]
+```
+
+Runs custom SMB enumeration when port 445 is discovered:
+
+```json
+"smb_script": {
+    "name": "SMB enum",
+    "text": "Launch custom smb enumeration script",
+    "detached": false,
+    "edit_before_launch": false,
+    "binary": "/bin/bash",
+    "args": ["scripts/smb.sh", "%%%IP%%%"]
+}
+```
+
+</Accordion>
+
+<Accordion title="Kerberos (88)">
+
+```json
+"88": [
+    "kerbrute"
+]
+```
+
+Automatically enumerates Active Directory usernames:
+
+```json
+"kerbrute": {
+    "name": "kerbrute",
+    "text": "Guess usernames with kerbrute",
+    "detached": false,
+    "binary": "/usr/bin/kerbrute",
+    "args": ["userenum", "--dc", "%%%IP%%%", "-d", "%%%DOMAIN%%%", 
+             "/usr/share/wordlists/SecLists/Usernames/xato-net-10-million-usernames-custom.txt"]
+}
+```
+
+</Accordion>
+
+<Accordion title="SNMP (UDP 161)">
+
+```json
+"udp": {
+    "161": [
+        "onesixtyone"
+    ]
+}
+```
+
+Brute-forces SNMP community strings:
+
+```json
+"onesixtyone": {
+    "name": "onesixtyone",
+    "text": "Launch onesixtyone",
+    "detached": false,
+    "binary": "/usr/bin/onesixtyone",
+    "args": ["-c", "/usr/share/wordlists/SecLists/Discovery/SNMP/snmp-onesixtyone.txt", "%%%IP%%%"]
+}
+```
+
+</Accordion>
+
+## Enabling and disabling autorun
+
+Autorun can be toggled globally in the preferences:
+
+```json
+"user_prefs": {
+    "enable_autorun": true,
+    "enable_autorun_on_xml_import": false
+}
+```
+
+### Configuration options
+
+| Option | Description | Default |
+|--------|-------------|--------|
+| `enable_autorun` | Enable autorun for new scans | `true` |
+| `enable_autorun_on_xml_import` | Enable autorun when importing XML files | `false` |
+
+<Warning>
+Be cautious with `enable_autorun_on_xml_import` when importing large XML files with many hosts. This can trigger hundreds of simultaneous processes.
+</Warning>
+
+## Autorun execution flow
+
+Here's how QtRecon processes autorun rules:
+
+<Steps>
+  <Step title="Scan completes">
+    Nmap scan finishes and XML output is parsed
+  </Step>
+
+  <Step title="Extract new ports">
+    QtRecon identifies which ports are newly discovered vs. already known
+  </Step>
+
+  <Step title="Check autorun rules">
+    For each new port, the autorun configuration is checked for matching rules
+  </Step>
+
+  <Step title="Execute tools">
+    All tools configured for that port/protocol combination are launched automatically
+  </Step>
+
+  <Step title="Log execution">
+    Each autorun action is logged:
+    ```
+    [AUTORUN] Running Nikto on tcp://192.168.1.100:80
+    [AUTORUN] Running feroxbuster on tcp://192.168.1.100:80
+    ```
+  </Step>
+</Steps>
+
+## Wildcard autorun (any port)
+
+You can configure tools to run on any open port using the special `"any"` key:
+
+```json
+"tcp": {
+    "any": [
+        "netcat",
+        "firefox",
+        "nuclei"
+    ]
+}
+```
+
+<Warning>
+Use `"any"` autorun rules carefully. They will trigger for every single open TCP port discovered, which can quickly overwhelm your system.
+</Warning>
+
+<Tip>
+The `"any"` key is more useful in `ports_associations` to make certain tools available for all ports without automatic execution.
+</Tip>
+
+## Autorun from the controller
+
+The autorun logic is implemented in `core/controller.py:307-343`. Here's the key flow:
+
+```python
+def autorun(self, new_hosts: dict):
+    """
+    :param new_hosts: {host_id: {'tcp': [], 'udp': []}
+    """
+    for new_host in new_hosts.keys():
+        host_details = self.host_model.get_host_details(new_host)
+        
+        for proto in ['tcp', 'udp']:
+            if proto not in Config.get()['autorun'].keys():
+                continue
+                
+            for port in Config.get()['autorun'][proto]:
+                if port.lower() == 'any':
+                    # Run on all discovered ports
+                    services_to_autorun = new_hosts[new_host][proto]
+                    for service in services_to_autorun:
+                        for program in Config.get()['autorun'][proto][port]:
+                            self.log('AUTORUN', f"Running {program} on {proto}://{host_details['ip']}:{service}")
+                            self.new_job(program, host_details['id'], service)
+                else:
+                    # Run only if specific port was discovered
+                    if port in new_hosts[new_host][proto]:
+                        for program in Config.get()['autorun'][proto][port]:
+                            self.log('AUTORUN', f"Running {program} on {proto}://{host_details['ip']}:{port}")
+                            self.new_job(program, host_details['id'], port)
+```
+
+## Managing autorun in the UI
+
+You can configure autorun rules through the Settings dialog:
+
+<Steps>
+  <Step title="Open settings">
+    Navigate to **Edit** > **Settings** > **User binaries** tab
+  </Step>
+
+  <Step title="Select a tool">
+    Find the tool you want to configure in the list
+  </Step>
+
+  <Step title="Set autorun ports">
+    In the **Autorun for ports** field, specify ports using the format:
+    ```
+    TCP/80;TCP/443;UDP/161
+    ```
+  </Step>
+
+  <Step title="Save configuration">
+    Click **OK** to save. QtRecon will automatically update the autorun configuration.
+  </Step>
+</Steps>
+
+<Note>
+The UI format `TCP/80;TCP/443` is converted to the JSON structure automatically when you save settings.
+</Note>

@@ -1,0 +1,160 @@
+---
+title: Changelog
+description: Version history and release notes for QtRecon
+---
+
+QtRecon is actively maintained and improved based on user feedback and testing experience. This page tracks all notable changes, improvements, and bug fixes across versions.
+
+## v1.7.2
+
+**Bug fixes:**
+
+- Fixed a bug with filesystem paths not expanding
+- Fixed a bug with several Nmap targets when launching a scan
+- Fixed a bug in search when host did not have any app tab
+- Fixed a bug when launching manually a command
+- Fixed a bug when re-launching autorun program for a specific host
+- Fixed a bug when merging results with an XML file
+
+## v1.7.1
+
+**Bug fixes:**
+
+- Fixed a crash with Python < 3.12
+- Fixed a bug where database crashed when trying to assign an already existing IP address
+- Fixed a bug where a set of credentials could appear several times in the popup dialog
+- Fixed a bug with dark-theme systems
+
+## v1.7
+
+**New features:**
+
+- Credentials that have a domain field different from 'localhost' or 'hostname' can now be used on all machines
+- Configuration file moved to `$XDG_CONFIG_HOME/qtrecon/conf.json` (or `$HOME/.config/qtrecon/conf.json`)
+
+**Improvements:**
+
+- Better error handling
+- Visual and workflow bug fixes
+
+## v1.6
+
+**Major features:**
+
+- Added different types of Nmap scan options
+- Import credentials from secretsdump output, or `user:password`, `user:hash` formats
+- Configuration can now be edited through the GUI (F10)
+- Network scan options can be saved as defaults
+
+**New features:**
+
+- `edit_before_launch` variable for programs lets users edit commands before executing
+- Improved "Import XML file" feature to import several .xml files at once
+- Support for large scan results with better performance
+- New "Delete hosts with no services" feature in Edit menu
+
+**Improvements:**
+
+- Various performance optimizations
+- Quality of life improvements
+- Bug fixes
+
+## v1.5
+
+**New features:**
+
+- New screenshot module to automatically capture your screen every X seconds
+- New 'Go to Host view' feature to navigate from service/password tabs to host view
+- `%%%HOSTNAME%%%` variable can now be dynamically replaced in commands
+
+**Improvements:**
+
+- Changed the Nmap parser to better capture hostnames of hosts
+- Remembers current open folder when importing .xml or opening project files
+- Sorting enabled in the credentials tab
+- IP address now displayed in the credentials view
+
+**Technical changes:**
+
+- Migrated to PySide6 (Qt6)
+
+## v1.4
+
+**New features:**
+
+- New global view for credentials - all creds visible in a single tab
+- Credential variables (DOMAIN, USERNAME, HASH, PASSWORD, SSH_KEY) can be used and replaced if valid credentials are registered for the current host
+- Compatible with Masscan XML outputs
+
+**Bug fixes:**
+
+- Fixed a bug where the service tab wasn't updated properly
+- Fixed a bug in the Nmap parser where invalid XML strings like `&#x1;` are now properly handled
+
+**Improvements:**
+
+- Various UI improvements
+
+## v1.3
+
+**Improvements:**
+
+- Increased default main window size
+- Keeps current tab focused when selecting another host
+
+**Bug fixes:**
+
+- Fixed a crash when the reloaded configuration was incorrectly formatted
+- Fixed a bug with snippet HTML rendering
+- Changed font and background colors for snippets
+
+## v1.2
+
+**New features:**
+
+- Added the credentials tab for every host
+
+**Bug fixes:**
+
+- General bug fixes
+
+## v1.1
+
+**New features:**
+
+- Can now drag & drop or paste pictures into the note field
+
+**Improvements:**
+
+- Improved code for handling snippets
+
+**Bug fixes:**
+
+- General bug fixes
+
+## Known bugs
+
+<Warning>
+The following bugs are tracked and being worked on:
+</Warning>
+
+- After scanning a host, importing XML files may cause a freeze (requires signal refactoring)
+- Cannot stop privileged Nmap scans launched via pkexec
+
+## Planned features
+
+<Note>
+Features under consideration for future releases:
+</Note>
+
+- Comments on passwords
+- Process pool in job model
+- Search in application tabs
+- Rename tab + icon when job is still running
+- Log changes of IP addresses
+- Better configuration validation (port associations, autorun, mandatory fields)
+- Rich text notes or integrated CherryTree equivalent
+
+---
+
+**Want to contribute?** QtRecon is inspired by SPARTA and built for penetration testers. Feature requests and bug reports are welcome.

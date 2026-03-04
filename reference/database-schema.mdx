@@ -1,0 +1,222 @@
+---
+title: Database schema
+description: Complete SQLite database schema reference for QtRecon workspaces
+---
+
+QtRecon stores all reconnaissance data in a SQLite database. Each workspace file (`.db`) contains the following tables.
+
+## Overview
+
+The database uses an in-memory SQLite instance during runtime and exports to disk on save. All workspaces are portable SQLite files that can be queried with standard SQL tools if needed.
+
+## Tables
+
+### hosts
+
+Stores discovered hosts and their metadata.
+
+<ResponseField name="id" type="integer" required>
+  Primary key, auto-incremented
+</ResponseField>
+
+<ResponseField name="os" type="text">
+  Operating system detected by Nmap or manually set
+</ResponseField>
+
+<ResponseField name="ip" type="text" required>
+  IP address (must be unique across all hosts)
+</ResponseField>
+
+<ResponseField name="hostname" type="text">
+  Hostname discovered or manually assigned
+</ResponseField>
+
+<ResponseField name="mac" type="text">
+  MAC address if available
+</ResponseField>
+
+<ResponseField name="highlight" type="text">
+  Color highlight for visual organization (e.g., marking high-value targets)
+</ResponseField>
+
+<ResponseField name="pwned" type="integer" required>
+  Flag indicating compromise status (0 = not pwned, 1 = pwned). Enforced with CHECK constraint
+</ResponseField>
+
+<ResponseField name="nmap" type="text">
+  Raw Nmap scan output in text format
+</ResponseField>
+
+<ResponseField name="notes" type="text">
+  User notes stored as HTML (supports rich text, images via drag-and-drop)
+</ResponseField>
+
+<Note>
+The `ip` field has a UNIQUE constraint to prevent duplicate host entries. For databases created before v1.6, a unique index is added during import for compatibility.
+</Note>
+
+### hosts_ports
+
+Stores open ports and services for each host.
+
+<ResponseField name="host_id" type="integer" required>
+  Foreign key to hosts.id
+</ResponseField>
+
+<ResponseField name="proto" type="text" required>
+  Protocol type ("tcp" or "udp")
+</ResponseField>
+
+<ResponseField name="port" type="text" required>
+  Port number as text
+</ResponseField>
+
+<ResponseField name="status" type="text">
+  Port status (e.g., "open", "filtered", "closed")
+</ResponseField>
+
+<ResponseField name="description" type="text">
+  Service description or banner information
+</ResponseField>
+
+<Note>
+This table has no primary key and allows multiple entries per host for different ports.
+</Note>
+
+### hosts_tabs
+
+Stores output from executed tools and commands.
+
+<ResponseField name="id" type="integer" required>
+  Primary key, auto-incremented
+</ResponseField>
+
+<ResponseField name="host_id" type="integer" required>
+  Foreign key to hosts.id
+</ResponseField>
+
+<ResponseField name="job_id" type="integer" required>
+  Foreign key to jobs.id linking to the job that created this tab
+</ResponseField>
+
+<ResponseField name="cmdline" type="text">
+  Full command line executed (added in v1.7)
+</ResponseField>
+
+<ResponseField name="title" type="text" required>
+  Tab title displayed in the UI
+</ResponseField>
+
+<ResponseField name="text" type="text">
+  Tool output content
+</ResponseField>
+
+<Warning>
+For databases created before v1.7, the `cmdline` field will be NULL. It's added automatically during import.
+</Warning>
+
+### hosts_creds
+
+Stores discovered or configured credentials for hosts.
+
+<ResponseField name="id" type="integer" required>
+  Primary key, auto-incremented
+</ResponseField>
+
+<ResponseField name="host_id" type="integer" required>
+  Foreign key to hosts.id
+</ResponseField>
+
+<ResponseField name="type" type="text" default="password">
+  Credential type ("password", "hash", or "ssh_key")
+</ResponseField>
+
+<ResponseField name="domain" type="text" default="">
+  Domain/workgroup name. Credentials with domain != 'localhost' or hostname can be used on all machines (v1.7+)
+</ResponseField>
+
+<ResponseField name="username" type="text" default="">
+  Username or account name
+</ResponseField>
+
+<ResponseField name="password" type="text" default="">
+  Password, hash, or SSH key content depending on the type field
+</ResponseField>
+
+<Note>
+This table was added in v1.2. Older databases will have it created automatically on import.
+</Note>
+
+### logs
+
+Application log entries for debugging and audit trail.
+
+<ResponseField name="id" type="integer" required>
+  Primary key, auto-incremented
+</ResponseField>
+
+<ResponseField name="date" type="text" required>
+  Timestamp of the log entry
+</ResponseField>
+
+<ResponseField name="type" type="text" required>
+  Log category ("RUNTIME", "INFO", "WARNING", "CRITICAL", "AUTORUN")
+</ResponseField>
+
+<ResponseField name="log" type="text" required>
+  Log message content
+</ResponseField>
+
+<Note>
+RUNTIME logs are excluded from exports. All logs can optionally be deleted on save via user preferences.
+</Note>
+
+### jobs
+
+Tracks running and completed processes/scans.
+
+<ResponseField name="id" type="integer" required>
+  Primary key, auto-incremented
+</ResponseField>
+
+<ResponseField name="host_id" type="integer" required>
+  Foreign key to hosts.id (target of this job)
+</ResponseField>
+
+<ResponseField name="type" type="text" required>
+  Job type identifier
+</ResponseField>
+
+<ResponseField name="timestamp" type="text" required>
+  When the job was created/started
+</ResponseField>
+
+<ResponseField name="state" type="text" required>
+  Current job state ("running", "completed", "failed", etc.)
+</ResponseField>
+
+<ResponseField name="command" type="text" required>
+  Full command being executed
+</ResponseField>
+
+<Warning>
+All jobs are deleted when exporting/saving the database. Job IDs must remain unique and are never reset.
+</Warning>
+
+## Compatibility notes
+
+QtRecon automatically handles schema migrations when opening older database files:
+
+- **v1.2**: Adds `hosts_creds` table if missing
+- **v1.6**: Adds UNIQUE constraint on `hosts.ip` field
+- **v1.7**: Adds `cmdline` field to `hosts_tabs` table
+
+## Querying workspaces manually
+
+Since workspaces are standard SQLite files, you can query them directly:
+
+```bash
+sqlite3 workspace.db "SELECT ip, hostname FROM hosts WHERE pwned = 1;"
+```
+
+This is useful for generating reports or extracting specific data for other tools.

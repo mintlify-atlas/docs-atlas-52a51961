@@ -1,0 +1,184 @@
+---
+title: Core binaries
+description: Configuration of essential system binaries for QtRecon
+---
+
+The `core_binaries` section defines essential system binaries that QtRecon requires for its core functionality. These binaries must be present and executable for QtRecon to work properly.
+
+## Structure
+
+Each core binary is configured with:
+
+- **binary**: Full path to the executable
+- **args**: Default arguments passed to the binary
+
+## Available core binaries
+
+### nmap
+
+The network scanner used for port scanning and service detection.
+
+```json
+"nmap": {
+    "binary": "/usr/bin/nmap",
+    "args": []
+}
+```
+
+<ParamField path="binary" type="string" required>
+  Full path to the nmap executable
+</ParamField>
+
+<ParamField path="args" type="array">
+  Default arguments to pass to nmap (typically empty, as scan-specific arguments are added by QtRecon)
+</ParamField>
+
+<Note>
+nmap is the most critical binary in QtRecon. Ensure it's installed and the path is correct.
+</Note>
+
+### terminal
+
+The terminal emulator used to launch interactive tools.
+
+```json
+"terminal": {
+    "binary": "/usr/bin/konsole",
+    "args": ["-e"]
+}
+```
+
+<ParamField path="binary" type="string" required>
+  Full path to the terminal emulator executable
+</ParamField>
+
+<ParamField path="args" type="array">
+  Arguments needed to execute a command. Common values:
+  - Konsole: `["-e"]`
+  - GNOME Terminal: `["--"]`
+  - xterm: `["-e"]`
+  - Alacritty: `["-e"]`
+</ParamField>
+
+<Tip>
+The `-e` flag tells most terminal emulators to execute the command that follows.
+</Tip>
+
+### graphical_su
+
+The privilege escalation tool used when root access is required.
+
+```json
+"graphical_su": {
+    "binary": "/usr/bin/pkexec",
+    "args": []
+}
+```
+
+<ParamField path="binary" type="string" required>
+  Full path to the graphical sudo/su executable
+</ParamField>
+
+<ParamField path="args" type="array">
+  Default arguments (typically empty for pkexec)
+</ParamField>
+
+## Common configurations
+
+### KDE Plasma
+
+```json
+"core_binaries": {
+    "nmap": {
+        "binary": "/usr/bin/nmap",
+        "args": []
+    },
+    "terminal": {
+        "binary": "/usr/bin/konsole",
+        "args": ["-e"]
+    },
+    "graphical_su": {
+        "binary": "/usr/bin/pkexec",
+        "args": []
+    }
+}
+```
+
+### GNOME
+
+```json
+"core_binaries": {
+    "nmap": {
+        "binary": "/usr/bin/nmap",
+        "args": []
+    },
+    "terminal": {
+        "binary": "/usr/bin/gnome-terminal",
+        "args": ["--"]
+    },
+    "graphical_su": {
+        "binary": "/usr/bin/pkexec",
+        "args": []
+    }
+}
+```
+
+### Xfce
+
+```json
+"core_binaries": {
+    "nmap": {
+        "binary": "/usr/bin/nmap",
+        "args": []
+    },
+    "terminal": {
+        "binary": "/usr/bin/xfce4-terminal",
+        "args": ["-e"]
+    },
+    "graphical_su": {
+        "binary": "/usr/bin/gksu",
+        "args": []
+    }
+}
+```
+
+## Finding binary paths
+
+Use the `which` command to locate binaries on your system:
+
+```bash
+which nmap
+which konsole
+which pkexec
+```
+
+<Warning>
+QtRecon validates that all core binaries exist and are executable on startup. If any are missing or not executable, the application will display an error and may not function properly.
+</Warning>
+
+## Troubleshooting
+
+### Binary not found
+
+If QtRecon reports that a binary is not found:
+
+1. Verify the binary is installed on your system
+2. Use `which <binary_name>` to find the correct path
+3. Update the path in `conf.json`
+4. Restart QtRecon
+
+### Binary not executable
+
+If a binary exists but is not executable:
+
+```bash
+chmod +x /path/to/binary
+```
+
+### Using alternative binaries
+
+You can substitute alternative tools as long as they're command-line compatible:
+
+- **Terminal**: Any terminal emulator that supports the `-e` flag or equivalent
+- **graphical_su**: `pkexec`, `gksu`, `kdesu`, or similar
+- **nmap**: Must be the actual nmap binary (alternatives not supported)

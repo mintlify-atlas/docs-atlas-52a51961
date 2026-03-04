@@ -1,0 +1,154 @@
+---
+title: Configuration file structure
+description: Overview of QtRecon's conf.json structure and main sections
+---
+
+QtRecon uses a JSON configuration file to manage all aspects of the application's behavior. This page provides an overview of the configuration file structure and its main sections.
+
+## Configuration file location
+
+QtRecon looks for its configuration file in the following locations:
+
+- `$XDG_CONFIG_HOME/qtrecon/conf.json` (if `XDG_CONFIG_HOME` is set)
+- `~/.config/qtrecon/conf.json` (default)
+
+If no configuration file exists, QtRecon will automatically create one based on the included `conf.json.example` template.
+
+## Main sections
+
+The configuration file is organized into several main sections:
+
+### paths
+
+Defines filesystem paths used by QtRecon.
+
+```json
+"paths": {
+    "nmap_output_dir": "/tmp/QtRecon"
+}
+```
+
+<ParamField path="nmap_output_dir" type="string">
+  Directory where nmap scan results are stored
+</ParamField>
+
+### core_binaries
+
+Configures essential system binaries required for QtRecon's core functionality. See [Core binaries](/configuration/core-binaries) for details.
+
+### user_binaries
+
+Defines custom tools and scripts that can be launched from QtRecon. See [User binaries](/configuration/user-binaries) for details.
+
+### ports_associations
+
+Maps network ports to specific tools that should be available for those ports. See [Port associations](/configuration/port-associations) for details.
+
+### autorun
+
+Configures which tools should automatically run when specific ports are discovered. See [Autorun settings](/configuration/autorun-settings) for details.
+
+### user_prefs
+
+Application preferences and behavior settings.
+
+```json
+"user_prefs": {
+    "enable_autorun": true,
+    "enable_autorun_on_xml_import": false,
+    "confirm_before_tab_removal": true,
+    "dev_null_as_stdin": true,
+    "remove_nmap_xml_files_after_scan": false,
+    "delete_logs_on_save": false,
+    "autosave": false,
+    "autosave_interval": 600000,
+    "preferred_interfaces": ["tun0", "vpn0", "eth0"],
+    "preferred_lport": 8444
+}
+```
+
+<ParamField path="enable_autorun" type="boolean">
+  Enable automatic execution of tools when ports are discovered
+</ParamField>
+
+<ParamField path="enable_autorun_on_xml_import" type="boolean">
+  Run autorun tools when importing nmap XML files
+</ParamField>
+
+<ParamField path="confirm_before_tab_removal" type="boolean">
+  Show confirmation dialog before closing tabs
+</ParamField>
+
+<ParamField path="dev_null_as_stdin" type="boolean">
+  Use /dev/null as stdin for spawned processes
+</ParamField>
+
+<ParamField path="remove_nmap_xml_files_after_scan" type="boolean">
+  Delete nmap XML files after importing scan results
+</ParamField>
+
+<ParamField path="delete_logs_on_save" type="boolean">
+  Clear logs when saving the project
+</ParamField>
+
+<ParamField path="autosave" type="boolean">
+  Enable automatic project saving
+</ParamField>
+
+<ParamField path="autosave_interval" type="integer">
+  Interval between autosaves in milliseconds (default: 600000 = 10 minutes)
+</ParamField>
+
+<ParamField path="preferred_interfaces" type="array">
+  Network interfaces to prioritize for determining LHOST variable
+</ParamField>
+
+<ParamField path="preferred_lport" type="integer">
+  Default local port for reverse shells and listeners
+</ParamField>
+
+### user_variables
+
+Defines custom variables that can be used throughout the configuration. See [Variables](/configuration/variables) for details.
+
+### snippets
+
+Pre-configured code snippets and commands for common penetration testing tasks (reverse shells, privilege escalation, etc.).
+
+### screenshots
+
+Configuration for the automated screenshot functionality.
+
+### nmap_options
+
+Default nmap scan options.
+
+```json
+"nmap_options": {
+    "ports": "T:-,U:53,161,631",
+    "type": "-sS",
+    "speed": "-T3",
+    "skip_host_discovery": false,
+    "version_probing": true,
+    "default_scripts": true,
+    "os_detection": true,
+    "tcp_and_udp": true,
+    "additional_args": "-v --min-rate 500"
+}
+```
+
+<Note>
+The configuration file uses JSON format. Ensure proper syntax with valid quotes, commas, and brackets to avoid parsing errors.
+</Note>
+
+## Validation
+
+QtRecon validates the configuration file structure on startup. If the configuration is invalid:
+
+1. A descriptive error message will be displayed
+2. The application will fall back to the default configuration if possible
+3. Check the console output for specific validation errors
+
+<Warning>
+Always back up your `conf.json` file before making extensive modifications.
+</Warning>

@@ -1,0 +1,402 @@
+---
+title: Screenshots
+description: Configure automatic screenshot capture during penetration tests with process tracking and screen lock detection
+---
+
+## Overview
+
+QtRecon includes a sophisticated screenshot module that automatically captures your desktop at regular intervals during penetration tests. Screenshots are compressed into archives with optional process tracking and OCR capabilities.
+
+## Screenshot engines
+
+QtRecon supports two screenshot capture methods:
+
+### Qt engine (recommended)
+
+Uses Qt's built-in screen capture functionality:
+- No external dependencies
+- Multi-monitor support
+- Fast and reliable
+- Integrated directly into QtRecon
+
+### External command
+
+Executes an external screenshot tool:
+- Supports any command-line screenshot utility
+- More flexible for custom setups
+- Requires proper command configuration
+
+## Configuration
+
+Screenshot settings are stored in `conf.json` under the `screenshots` section:
+
+```json
+"screenshots": {
+    "engine": "qt",
+    "interval": 15,
+    "dst_folder": "/home/user/Images/",
+    "work_folder": "/tmp/",
+    "pixel_threshold_different_images": 500,
+    "check_locked_screen": true,
+    "check_locked_screen_cmd": "dbus-send --session --dest=org.freedesktop.ScreenSaver --type=method_call --print-reply --reply-timeout=20000 /org/freedesktop/ScreenSaver org.freedesktop.ScreenSaver.GetActive",
+    "check_locked_screen_cmd_result": "boolean true",
+    "screenshot_cmd": "/usr/bin/spectacle -nfb -o %%%OUTPUT%%%",
+    "ignore_if_active_window": true,
+    "convert_png_to_jpg": true,
+    "include_processes": true,
+    "include_ocr": false,
+    "processes_blacklist": ["systemd", "kthreadd", "vim", "chromium"],
+    "processes_ppid_blacklist": [1, 2]
+}
+```
+
+### Configuration options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `engine` | `"qt"` or `"external"` | Screenshot capture method |
+| `interval` | integer | Seconds between screenshots |
+| `dst_folder` | string | Final destination for compressed archives |
+| `work_folder` | string | Temporary storage during capture session |
+| `pixel_threshold_different_images` | integer | Minimum pixel changes to save screenshot |
+| `check_locked_screen` | boolean | Skip capture when screen is locked |
+| `check_locked_screen_cmd` | string | Command to check if screen is locked |
+| `check_locked_screen_cmd_result` | string | Expected output indicating locked screen |
+| `screenshot_cmd` | string | External command (if using external engine) |
+| `ignore_if_active_window` | boolean | Skip capture if QtRecon window has focus |
+| `convert_png_to_jpg` | boolean | Convert PNG to JPG for compression |
+| `include_processes` | boolean | Store running process list with each screenshot |
+| `include_ocr` | boolean | Perform OCR on screenshots (experimental) |
+
+## Starting screenshot capture
+
+<Steps>
+  <Step title="Open screenshot module">
+    Navigate to **Tools** > **Screenshot module** in the main menu
+  </Step>
+
+  <Step title="Configure settings">
+    Adjust the interval, folders, and options as needed. The configuration from `conf.json` is pre-filled.
+  </Step>
+
+  <Step title="Start capture">
+    Click **Start** to begin capturing screenshots at the specified interval
+  </Step>
+
+  <Step title="Monitor progress">
+    The status bar shows:
+    - Number of screenshots taken
+    - Total size in MB
+    - Elapsed time
+  </Step>
+
+  <Step title="Save archive">
+    Click **Stop** to end capture and compress all screenshots into a `.tar.xz` archive
+  </Step>
+</Steps>
+
+## Automatic capture behavior
+
+### Duplicate detection
+
+QtRecon compares each new screenshot to the previous one using pixel difference analysis:
+
+```python
+# From utils/Screenshot.py:198-200
+if current_screenshot and (not self.previous_screenshots[i] or 
+    len(set(ImageChops.difference(current_screenshot, self.previous_screenshots[i]).getdata())) > 
+    self.pixel_threshold_different_images):
+    self.nb_of_screenshots += 1
+    self.previous_screenshots[i] = current_screenshot
+```
+
+<Note>
+Only screenshots with more than `pixel_threshold_different_images` changed pixels are saved. Duplicate or nearly-identical screenshots are automatically discarded.
+</Note>
+
+### Edge cropping
+
+To improve duplicate detection, QtRecon crops 61 pixels from each edge before comparison:
+
+```python
+# From utils/Screenshot.py:189
+current_screenshots.append(pil_img.crop((61, 61, pil_img_width-61, pil_img_height-61)))
+```
+
+<Tip>
+This removes taskbars, system trays, and clocks that change frequently but aren't relevant to your engagement.
+</Tip>
+
+### Screen lock detection
+
+QtRecon can skip screenshots when your screen is locked:
+
+```python
+# From utils/Screenshot.py:157-160
+if self.check_locked_screen:
+    cmd = subprocess.Popen(self.check_locked_screen_cmd.split(), stdout=subprocess.PIPE)
+    if any([self.check_locked_screen_cmd_result in line.decode() for line in cmd.stdout.readlines()]):
+        return False
+```
+
+<CodeGroup>
+
+```bash KDE Plasma / GNOME
+dbus-send --session --dest=org.freedesktop.ScreenSaver \
+  --type=method_call --print-reply --reply-timeout=20000 \
+  /org/freedesktop/ScreenSaver \
+  org.freedesktop.ScreenSaver.GetActive
+```
+
+```bash Expected result when locked
+method return time=1234567890.123 sender=:1.234 -> destination=:1.456 serial=5 reply_serial=4
+   boolean true
+```
+
+</CodeGroup>
+
+## PNG to JPG compression
+
+If enabled, screenshots are immediately converted from PNG to JPG:
+
+```python
+# From utils/Screenshot.py:202-205
+if self.convert_png_to_jpg:
+    subprocess.run(['magick', screenshot_files[i], 
+                    screenshot_files[i].removesuffix('.png') + '.jpg'])
+    os.remove(screenshot_files[i])
+    screenshot_files[i] = screenshot_files[i].removesuffix('.png') + '.jpg'
+```
+
+<Warning>
+PNG to JPG conversion requires ImageMagick (`magick` command). QtRecon will fail to start if this option is enabled but ImageMagick is not installed.
+</Warning>
+
+## Process tracking
+
+When `include_processes` is enabled, QtRecon creates an SQLite database alongside screenshots tracking all running processes:
+
+```python
+# From utils/Screenshot.py:77
+self.database.execute(
+    "CREATE TABLE processes(
+        id integer primary key autoincrement not null, 
+        screenshot_file text, 
+        username text, 
+        pid integer not null, 
+        ppid integer not null, 
+        cwd text, 
+        name text, 
+        cmdline text
+    )"
+)
+```
+
+### Process blacklist
+
+Common system processes are filtered out to reduce noise:
+
+```python
+# From utils/Screenshot.py:207-223
+if self.include_processes:
+    for process in psutil.process_iter():
+        if (process.ppid() not in self.processes_ppid_blacklist and 
+            process.name() not in self.processes_blacklist):
+            
+            query = "INSERT INTO processes (screenshot_file, username, pid, ppid, cwd, name, cmdline) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            self.database.execute(query, (
+                query_filename,
+                process.username(),
+                process.pid,
+                process.ppid(),
+                query_cwd,
+                process.name(),
+                query_cmd
+            ))
+            self.database.commit()
+```
+
+<Accordion title="Default process blacklist">
+
+```python
+processes_blacklist = [
+    'systemd', 'kthreadd', 'dbus-send', 'Xorg', 'sddm-helper',
+    'dbus-daemon', 'plasmashell', 'pulseaudio', 'pipewire',
+    'vim', 'chromium', 'firefox', 'Discord', 'signal-desktop'
+]
+
+processes_ppid_blacklist = [1, 2]  # init and kthreadd children
+```
+
+</Accordion>
+
+### Searching screenshots by process
+
+QtRecon generates a search script in each screenshot archive:
+
+```python
+# From utils/Screenshot.py:80-125 (simplified)
+#!/bin/env python
+import sqlite3
+import sys
+import shutil
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} chunk_of_cmdline_or_process")
+        sys.exit(1)
+    
+    request = sys.argv[1]
+    db = sqlite3.connect('autoscreen.sqlite')
+    
+    res = db.execute(
+        "SELECT DISTINCT screenshot_file FROM processes WHERE cmdline LIKE '%' || ? || '%'",
+        (request,)
+    )
+    screenshot_files = res.fetchall()
+    
+    os.mkdir(request)
+    for screenshot_file in screenshot_files:
+        shutil.copyfile(screenshot_file[0], request + '/' + screenshot_file[0])
+```
+
+<Steps>
+  <Step title="Extract the archive">
+    ```bash
+    tar xJf Autoscreen-20260304_143022.tar.xz
+    cd Autoscreen-20260304_143022/
+    ```
+  </Step>
+
+  <Step title="Search for process">
+    ```bash
+    python search.py "nikto"
+    ```
+  </Step>
+
+  <Step title="Review results">
+    Screenshots containing the process are copied to a dedicated folder:
+    ```
+    Found 23 screenshots. Creating copies in dedicated folder 'nikto'
+    Screenshot_20260304_143045-0.jpg -> nikto/Screenshot_20260304_143045-0.jpg
+    Screenshot_20260304_143100-0.jpg -> nikto/Screenshot_20260304_143100-0.jpg
+    ...
+    ```
+  </Step>
+</Steps>
+
+## Archive compression
+
+When you stop capturing, QtRecon compresses all screenshots into a `.tar.xz` archive:
+
+```python
+# From utils/Screenshot.py:127-149
+def save_archive(self):
+    self.archive = f'{self.dst_folder}/Autoscreen-{self.begin_datetime.year}{self.begin_datetime.month:02}{self.begin_datetime.day:02}_{self.begin_datetime.hour:02}{self.begin_datetime.minute:02}{self.begin_datetime.second:02}.tar.xz'
+    
+    cmd = ['tar', 'cJvpf', self.archive, '-C', self.folder, '.']
+    tar_output = subprocess.Popen(cmd,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+    
+    for line in tar_output.stdout:
+        line = line.decode().strip()
+        if any([line.endswith(item) for item in ['.jpg', '.png']]):
+            yield {'stdout': line}
+```
+
+### Compression statistics
+
+After compression, QtRecon reports the size reduction:
+
+```python
+# From core/controller.py:666-668
+folder_size = get_dir_size(self.screenshot_mgr.folder)
+archive_size = int(os.stat(self.screenshot_mgr.archive).st_size)
+self.ui.ui.number_of_screenshots.setText(
+    f"Created archive {self.screenshot_mgr.archive} with {'{:.2f}'.format(archive_size*100/folder_size)}% of original size "
+    f"({str(self.screenshot_mgr.nb_of_screenshots)} screenshots, {'{:.2f}'.format(archive_size/1024/1024)} Mo instead of {'{:.2f}'.format(folder_size/1024/1024)} Mo)."
+)
+```
+
+<Note>
+Typical compression ratios range from 5-15% of original size when using JPG conversion and LZMA compression (.tar.xz).
+</Note>
+
+## External screenshot command
+
+If using the external engine, configure a command with the `%%%OUTPUT%%%` placeholder:
+
+<CodeGroup>
+
+```bash Spectacle (KDE)
+/usr/bin/spectacle -nfb -o %%%OUTPUT%%%
+```
+
+```bash GNOME Screenshot
+/usr/bin/gnome-screenshot -f %%%OUTPUT%%%
+```
+
+```bash scrot
+/usr/bin/scrot %%%OUTPUT%%%
+```
+
+```bash ImageMagick
+/usr/bin/import -window root %%%OUTPUT%%%
+```
+
+</CodeGroup>
+
+<Warning>
+The external command must support the output filename as an argument and use the exact placeholder `%%%OUTPUT%%%` where the filename should be inserted.
+</Warning>
+
+## Multi-monitor support
+
+When using the Qt engine, QtRecon automatically detects and captures all connected displays:
+
+```python
+# From utils/Screenshot.py:166-173
+if len(self.previous_screenshots) != len(QGuiApplication.screens()):
+    self.previous_screenshots = [None] * len(QGuiApplication.screens())
+
+for i, screen in enumerate(QGuiApplication.screens()):
+    original_pixmap = screen.grabWindow(0)
+    if not original_pixmap.save(f"{screenshot_filename_prefix}-{i}.png"):
+        return False
+    else:
+        screenshot_files.append(f"{screenshot_filename_prefix}-{i}.png")
+```
+
+<Tip>
+Each monitor gets its own screenshot file with a numeric suffix: `Screenshot_20260304_143022-0.jpg`, `Screenshot_20260304_143022-1.jpg`, etc.
+</Tip>
+
+## Best practices
+
+<Accordion title="Use appropriate intervals">
+
+Choose your interval based on engagement type:
+- **15-30 seconds**: Active exploitation and fast-paced testing
+- **1-2 minutes**: General enumeration and documentation
+- **5+ minutes**: Long-running scans with minimal interaction
+
+</Accordion>
+
+<Accordion title="Enable process tracking">
+
+Always enable `include_processes` unless storage is extremely limited. The ability to search screenshots by process name is invaluable when reviewing long engagements.
+
+</Accordion>
+
+<Accordion title="Adjust pixel threshold">
+
+If you're getting too many duplicate screenshots, increase `pixel_threshold_different_images`. If important changes are being missed, decrease it. The default of 500 works well for most scenarios.
+
+</Accordion>
+
+<Accordion title="Clean up work folder">
+
+The temporary work folder is not automatically deleted. Periodically clean up `/tmp/Autoscreen-*` folders from interrupted sessions.
+
+</Accordion>
